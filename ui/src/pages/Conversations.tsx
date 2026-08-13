@@ -1,0 +1,277 @@
+import { useState, useEffect, useRef } from 'react';
+import { useWebSocket } from '../hooks/useWebSocket';
+
+interface Agent {
+  id: string;
+  name: string;
+}
+
+interface Message {
+  id: string;
+  role: string;
+  text: string;
+  time: string;
+  terminal_reason?: string;
+}
+
+const card: React.CSSProperties = {
+  background: 'var(--bg-card)',
+  border: '1px solid var(--border)',
+  borderRadius: 10,
+  boxShadow: 'var(--shadow)',
+};
+
+function Conversations() {
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchActive, setSearchActive] = useState(false);
+  const { events, status: wsStatus } = useWebSocket();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    fetch('/api/agents/definitions')
+      .then((res) => res.json())
+      .then((data) => {
+        const a = Array.isArray(data) ? data : [];
+        setAgents(a);
+        if (a.length > 0 && !selectedAgentId) {
+          setSelectedAgentId(a[0].id);
+        }
+      })
+      .catch(() => {});
+  }, [selectedAgentId]);
+
+  useEffect(() => {
+    if (!selectedAgentId) return;
+    setSearchQuery('');
+    setSearchActive(false);
+    setLoadingMessages(true);
+    fetch(`/api/agents/definitions/${selectedAgentId}/messages`)
+      .then((res) => res.json())
+      .then((data) => setMessages(Array.isArray(data) ? data : []))
+      .catch(() => setMessages([]))
+      .finally(() => setLoadingMessages(false));
+  }, [selectedAgentId]);
+
+  useEffect(() => {
+    if (!selectedAgentId || searchActive) return;
+    const relevant = events.filter(
+      (e) => e.agent_id === selectedAgentId && e.type === 'message'
+    );
+    if (relevant.length === 0) return;
+    const latest = relevant[relevant.length - 1];
+    const msg = latest.data as Message;
+    if (msg && msg.id) {
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === msg.id)) return prev;
+        return [...prev, msg];
+      });
+    }
+  }, [events, selectedAgentId, searchActive]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleSearch = () => {
+    if (!selectedAgentId || !searchQuery.trim()) return;
+    setIsSearching(true);
+    setSearchActive(true);
+    fetch(`/api/agents/definitions/${selectedAgentId}/messages/search?q=${encodeURIComponent(searchQuery.trim())}`)
+      .then((res) => res.json())
+      .then((data) => setMessages(Array.isArray(data) ? data : []))
+      .catch(() => setMessages([]))
+      .finally(() => setIsSearching(false));
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
+    setSearchActive(false);
+    if (!selectedAgentId) return;
+    setLoadingMessages(true);
+    fetch(`/api/agents/definitions/${selectedAgentId}/messages`)
+      .then((res) => res.json())
+      .then((data) => setMessages(Array.isArray(data) ? data : []))
+      .catch(() => setMessages([]))
+      .finally(() => setLoadingMessages(false));
+  };
+
+  const selectedAgent = agents.find((a) => a.id === selectedAgentId);
+
+  const wsColor = wsStatus === 'connected' ? 'var(--green)' : wsStatus === 'connecting' ? 'var(--amber)' : 'var(--red)';
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
+        <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)' }}>Conversations</h1>
+        <div style={{ display: 'flex', alignItems: 'center', fontSize: 15, color: 'var(--text-tertiary)', gap: 6 }}>
+          <span style={{
+            width: 7,
+            height: 7,
+            borderRadius: '50%',
+            background: wsColor,
+            display: 'inline-block',
+          }} />
+          {wsStatus}
+        </div>
+      </div>
+
+      <div className="conversations-layout" style={{ display: 'flex', gap: 16, height: 'calc(100vh - 140px)' }}>
+        {/* Agent list */}
+        <div className="conversations-agents" style={{ ...card, width: 200, padding: 6, overflowY: 'auto', flexShrink: 0 }}>
+          {agents.map((agent) => (
+            <div
+              key={agent.id}
+              data-hover={selectedAgentId !== agent.id ? '' : undefined}
+              onClick={() => setSelectedAgentId(agent.id)}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 7,
+                cursor: 'pointer',
+                fontSize: 16,
+                fontWeight: selectedAgentId === agent.id ? 600 : 400,
+                background: selectedAgentId === agent.id ? 'var(--accent)' : 'transparent',
+                color: selectedAgentId === agent.id ? '#fff' : 'var(--text-secondary)',
+                marginBottom: 1,
+              }}
+            >
+              {agent.name}
+            </div>
+          ))}
+          {agents.length === 0 && (
+            <div style={{ padding: 12, color: 'var(--text-tertiary)', fontSize: 15 }}>No agents</div>
+          )}
+        </div>
+
+        {/* Messages */}
+        <div style={{ ...card, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{
+            padding: '14px 20px',
+            borderBottom: '1px solid var(--border)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+          }}>
+            <span style={{ fontWeight: 600, fontSize: 17, color: 'var(--text-primary)' }}>
+              {selectedAgent?.name ?? 'Select an agent'}
+            </span>
+            {selectedAgentId && (
+              <form
+                onSubmit={(e) => { e.preventDefault(); handleSearch(); }}
+                style={{ display: 'flex', gap: 6, alignItems: 'center' }}
+              >
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search messages..."
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: 6,
+                    border: '1px solid var(--border)',
+                    background: 'var(--bg-elevated)',
+                    color: 'var(--text-primary)',
+                    fontSize: 14,
+                    width: 200,
+                    outline: 'none',
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={isSearching || !searchQuery.trim()}
+                  style={{
+                    padding: '5px 12px',
+                    borderRadius: 6,
+                    border: '1px solid var(--border)',
+                    background: 'var(--accent)',
+                    color: '#fff',
+                    fontSize: 14,
+                    cursor: 'pointer',
+                    opacity: isSearching || !searchQuery.trim() ? 0.5 : 1,
+                  }}
+                >
+                  {isSearching ? '...' : 'Search'}
+                </button>
+                {searchActive && (
+                  <button
+                    type="button"
+                    onClick={clearSearch}
+                    style={{
+                      padding: '5px 10px',
+                      borderRadius: 6,
+                      border: '1px solid var(--border)',
+                      background: 'var(--bg-elevated)',
+                      color: 'var(--text-secondary)',
+                      fontSize: 14,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Clear
+                  </button>
+                )}
+              </form>
+            )}
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {searchActive && (
+              <div style={{ color: 'var(--text-tertiary)', fontSize: 14, marginBottom: 8 }}>
+                Search results for "{searchQuery}" ({messages.length} found)
+              </div>
+            )}
+            {(loadingMessages || isSearching) && <div style={{ color: 'var(--text-tertiary)', fontSize: 16 }}>Loading...</div>}
+            {!loadingMessages && !isSearching && messages.length === 0 && (
+              <div style={{ color: 'var(--text-tertiary)', fontSize: 16 }}>
+                {searchActive ? 'No messages found' : 'No messages yet'}
+              </div>
+            )}
+            {messages.map((msg) => {
+              const isAssistant = msg.role === 'assistant';
+              return (
+                <div
+                  key={msg.id}
+                  style={{
+                    alignSelf: isAssistant ? 'flex-start' : 'flex-end',
+                    maxWidth: '75%',
+                    padding: '10px 14px',
+                    borderRadius: 10,
+                    background: isAssistant ? 'var(--accent-muted)' : 'var(--bg-elevated)',
+                    borderLeft: isAssistant ? '3px solid var(--accent)' : 'none',
+                    fontSize: 16,
+                  }}
+                >
+                  <div style={{ fontSize: 14, color: 'var(--text-tertiary)', marginBottom: 4 }}>
+                    <span style={{ color: isAssistant ? 'var(--accent)' : 'var(--text-secondary)', fontWeight: 600 }}>{msg.role}</span>
+                    {msg.time && <span style={{ marginLeft: 8 }}>{msg.time}</span>}
+                  </div>
+                  <div style={{ color: 'var(--text-primary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.text}</div>
+                  {msg.terminal_reason && msg.terminal_reason !== 'completed' && (
+                    <div style={{
+                      display: 'inline-block',
+                      marginTop: 6,
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      background: 'var(--amber-muted)',
+                      color: 'var(--amber)',
+                    }}>
+                      {msg.terminal_reason.replace(/_/g, ' ')}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            <div ref={messagesEndRef} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default Conversations;

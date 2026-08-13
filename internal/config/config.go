@@ -1,0 +1,247 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"time"
+
+	"gopkg.in/yaml.v3"
+)
+
+type Config struct {
+	Telegram  TelegramConfig             `yaml:"telegram"`
+	Defaults  DefaultsConfig             `yaml:"defaults"`
+	Agents    map[string]AgentDefinition `yaml:"agents"`
+	Router    RouterConfig               `yaml:"router"`
+	NATS      NATSConfig                 `yaml:"nats"`
+	Web       WebConfig                  `yaml:"web"`
+	Scheduler SchedulerConfig            `yaml:"scheduler"`
+	Vault     VaultConfig                `yaml:"vault"`
+	AgentMail AgentMailConfig            `yaml:"agentmail"`
+	Speech    SpeechConfig               `yaml:"speech"`
+}
+
+type AgentMailConfig struct {
+	APIKey string `yaml:"api_key"`
+}
+
+type SpeechConfig struct {
+	APIKey     string `yaml:"api_key"`
+	TTSEnabled bool   `yaml:"tts_enabled"`
+	TTSMode    string `yaml:"tts_mode"`
+	TTSVoice   string `yaml:"tts_voice"`
+}
+
+type VaultConfig struct {
+	Passphrase string `yaml:"passphrase"`
+}
+
+type TelegramConfig struct {
+	Token      string  `yaml:"token"`
+	AllowFrom  []int64 `yaml:"allow_from"`
+	MainChatID int64   `yaml:"main_chat_id"`
+}
+
+type DefaultsConfig struct {
+	Image           string         `yaml:"image"`
+	Model           string         `yaml:"model"`
+	MaxRunning      int            `yaml:"max_running"`
+	IdleTimeout     time.Duration  `yaml:"idle_timeout"`
+	AnthropicAPIKey string         `yaml:"anthropic_api_key"`
+	OAuthToken      string         `yaml:"oauth_token"`
+	Security        SecurityConfig `yaml:"security"`
+}
+
+// SecurityConfig controls Docker hardening flags applied to agent containers.
+// Defaults are the "Balanced" profile (see defaults()). All fields are
+// reloadable via hot config reload and overridable per-agent.
+//
+// Caveats for this stack:
+//   - NoNewPrivileges blocks setuid binaries from elevating, which breaks
+//     Chromium's setuid sandbox on hosts without unprivileged user namespaces.
+//   - DropCapabilities removes CAP_SYS_ADMIN, so nix *source* builds (which use
+//     the build sandbox) fail; binary-cache fetches are unaffected.
+type SecurityConfig struct {
+	NoNewPrivileges  bool     `yaml:"no_new_privileges"`
+	DropCapabilities bool     `yaml:"drop_capabilities"` // cap-drop ALL, then add back AddCapabilities
+	AddCapabilities  []string `yaml:"add_capabilities"`
+	PidsLimit        int64    `yaml:"pids_limit"` // 0 = unlimited
+	MemoryMB         int64    `yaml:"memory_mb"`  // 0 = unlimited
+	CPUs             float64  `yaml:"cpus"`       // 0 = unlimited
+	Tmpfs            bool     `yaml:"tmpfs"`      // mount hardened /tmp and /var/tmp
+	ReadonlyRootfs   bool     `yaml:"readonly_rootfs"`
+}
+
+const (
+	AgentsBasePath = "data/agents"
+	StorePath      = "data/praktor.db"
+	NATSPort       = 4222
+)
+
+type AgentDefinition struct {
+	Description      string            `yaml:"description"`
+	Model            string            `yaml:"model"`
+	Image            string            `yaml:"image"`
+	ClaudeMD         string            `yaml:"claude_md"`
+	Workspace        string            `yaml:"workspace"`
+	Env              map[string]string `yaml:"env"`
+	Files            []FileMount       `yaml:"files"`
+	AllowedTools     []string          `yaml:"allowed_tools"`
+	NixEnabled       bool              `yaml:"nix_enabled"`
+	AgentMailInboxID string            `yaml:"agentmail_inbox_id"`
+	Security         *SecurityConfig   `yaml:"security"` // nil = inherit defaults.security
+}
+
+type FileMount struct {
+	Secret string `yaml:"secret"`
+	Target string `yaml:"target"`
+	Mode   string `yaml:"mode"`
+}
+
+type RouterConfig struct {
+	DefaultAgent string `yaml:"default_agent"`
+}
+
+type NATSConfig struct {
+	DataDir string `yaml:"data_dir"`
+}
+
+type WebConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	Port    int    `yaml:"port"`
+	Auth    string `yaml:"auth"`
+}
+
+type SchedulerConfig struct {
+	PollInterval time.Duration `yaml:"poll_interval"`
+}
+
+func defaults() Config {
+	return Config{
+		Defaults: DefaultsConfig{
+			Image:       "praktor-agent:latest",
+			Model:       "claude-opus-4-7",
+			MaxRunning:  5,
+			IdleTimeout: 10 * time.Minute,
+			// Balanced hardening profile.
+			Security: SecurityConfig{
+				NoNewPrivileges:  true,
+				DropCapabilities: true,
+				AddCapabilities:  []string{"CHOWN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID"},
+				PidsLimit:        1024,
+				MemoryMB:         0,
+				CPUs:             0,
+				Tmpfs:            true,
+				ReadonlyRootfs:   false,
+			},
+		},
+		NATS: NATSConfig{
+			DataDir: "data/nats",
+		},
+		Web: WebConfig{
+			Enabled: true,
+			Port:    8080,
+		},
+		Scheduler: SchedulerConfig{
+			PollInterval: 30 * time.Second,
+		},
+		Speech: SpeechConfig{
+			TTSMode:  "voice",
+			TTSVoice: "alloy",
+		},
+	}
+}
+
+// Path returns the resolved config file path.
+func Path() string {
+	if v := os.Getenv("PRAKTOR_CONFIG"); v != "" {
+		return v
+	}
+	return "config/praktor.yaml"
+}
+
+func Load() (*Config, error) {
+	cfg := defaults()
+
+	path := os.Getenv("PRAKTOR_CONFIG")
+	if path == "" {
+		path = "config/praktor.yaml"
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("read config: %w", err)
+		}
+		// Config file not found, use defaults + env
+	} else {
+		// Expand environment variables in YAML
+		expanded := os.ExpandEnv(string(data))
+		if err := yaml.Unmarshal([]byte(expanded), &cfg); err != nil {
+			return nil, fmt.Errorf("parse config: %w", err)
+		}
+	}
+
+	// Environment variable overrides
+	applyEnv(&cfg)
+
+	// Apply defaults for agent definitions
+	for name, def := range cfg.Agents {
+		if def.Workspace == "" {
+			def.Workspace = name
+			cfg.Agents[name] = def
+		}
+	}
+
+	// Validation
+	if err := validate(&cfg); err != nil {
+		return nil, err
+	}
+
+	return &cfg, nil
+}
+
+func validate(cfg *Config) error {
+	if len(cfg.Agents) > 0 && cfg.Router.DefaultAgent == "" {
+		return fmt.Errorf("router.default_agent is required when agents are defined")
+	}
+	if cfg.Router.DefaultAgent != "" {
+		if _, ok := cfg.Agents[cfg.Router.DefaultAgent]; !ok {
+			return fmt.Errorf("router.default_agent %q not found in agents map", cfg.Router.DefaultAgent)
+		}
+	}
+	return nil
+}
+
+func applyEnv(cfg *Config) {
+	if v := os.Getenv("PRAKTOR_TELEGRAM_TOKEN"); v != "" {
+		cfg.Telegram.Token = v
+	}
+	if v := os.Getenv("ANTHROPIC_API_KEY"); v != "" {
+		cfg.Defaults.AnthropicAPIKey = v
+	}
+	if v := os.Getenv("CLAUDE_CODE_OAUTH_TOKEN"); v != "" {
+		cfg.Defaults.OAuthToken = v
+	}
+	if v := os.Getenv("PRAKTOR_WEB_PASSWORD"); v != "" {
+		cfg.Web.Auth = v
+	}
+	if v := os.Getenv("PRAKTOR_WEB_PORT"); v != "" {
+		if port, err := strconv.Atoi(v); err == nil {
+			cfg.Web.Port = port
+		}
+	}
+	if v := os.Getenv("PRAKTOR_AGENT_MODEL"); v != "" {
+		cfg.Defaults.Model = v
+	}
+	if v := os.Getenv("PRAKTOR_VAULT_PASSPHRASE"); v != "" {
+		cfg.Vault.Passphrase = v
+	}
+	if v := os.Getenv("AGENTMAIL_API_KEY"); v != "" {
+		cfg.AgentMail.APIKey = v
+	}
+	if v := os.Getenv("OPENAI_API_KEY"); v != "" {
+		cfg.Speech.APIKey = v
+	}
+}

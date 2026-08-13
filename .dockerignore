@@ -1,0 +1,8 @@
+.env
+config/
+data/
+tsrp-state/
+node_modules/
+**/node_modules/
+agent-runner/out/
+ui/dist/

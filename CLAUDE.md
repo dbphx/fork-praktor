@@ -1,0 +1,361 @@
+# Praktor
+
+Personal AI Agent Assistant.
+
+**Do NOT commit or push unless explicitly asked.**
+
+## Quick Context
+
+Go 1.26 service (`github.com/dbphx/fork-praktor`) that connects to Telegram, routes messages to named agents running Claude Code (Agent SDK) in isolated Docker containers, and provides a Mission Control Web UI. Single binary deployment via Docker Compose.
+
+## Architecture
+
+```
+Telegram ←→ Go Gateway ←→ Router ←→ Embedded NATS ←→ Agent Containers (Docker)
+                ↕                                          ↕
+            SQLite DB                             Claude Code SDK
+                ↕
+         Web UI (React SPA)
+```
+
+The gateway binary runs all core services: Telegram bot, message router, NATS message bus, agent orchestrator, scheduler, swarm coordinator, and HTTP/WebSocket server. Agent containers are spawned on demand via the Docker API and communicate with the host over NATS pub/sub.
+
+**Named Agents:** Multiple agents are defined in YAML config, each with its own description, model, image, env vars, secrets, allowed tools, and workspace. Messages are routed to agents via a 3-tier chain: `@agent_name` prefix → smart routing via default agent container → default agent fallback.
+
+## Project Structure
+
+```
+cmd/praktor/main.go              # CLI: `gateway`, `vault`, `backup`, `restore`, and `version` subcommands
+cmd/ptask/main.go                # Task management CLI (Go, runs inside agent containers)
+internal/
+  config/                        # YAML config + env var overrides
+  extensions/                    # Agent extension types (MCP servers, plugins, skills)
+  store/                         # SQLite (modernc.org/sqlite, pure Go) - agents, messages, tasks, swarms, secrets
+  vault/                         # AES-256-GCM encryption with Argon2id key derivation
+  natsbus/                       # Embedded NATS server + client helpers + topic naming
+  container/                     # Docker container lifecycle, image building, volume mounts
+  agent/                         # Message orchestrator, per-agent queue, session tracking
+  agentmail/                     # AgentMail WebSocket client for real-time email events
+  speech/                        # OpenAI Speech API client (Whisper STT + TTS)
+  registry/                      # Agent registry - syncs YAML config to DB, resolves agent config
+  router/                        # Message router - @prefix parsing, smart routing via default agent
+  telegram/                      # Telegram bot (telego), long-polling, message chunking
+  scheduler/                     # Cron/interval/relative delay task polling (adhocore/gronx)
+  swarm/                         # Graph-based swarm orchestration (DAG execution, collaborative chat)
+  web/                           # HTTP server, REST API, WebSocket hub, embedded SPA
+Dockerfile                       # Gateway image (multi-stage: UI + Go + scratch)
+Dockerfile.agent                 # Agent image (multi-stage: Go + playwright-cli + esbuild + alpine)
+agent-runner/src/                # TypeScript: NATS bridge + Claude Code SDK + MCP servers (bundled with esbuild)
+  index.ts                       # Main entrypoint: agent lifecycle, message handling (sequential user messages + parallel scheduled tasks), MCP server registration
+  extensions.ts                  # Apply agent extensions on startup (MCP servers, plugins, skills)
+  nats-bridge.ts                 # NATS pub/sub wrapper for agent ↔ host communication
+  ipc.ts                         # Shared NATS IPC helper (sendIPC + IPCResponse)
+  mcp-tasks.ts                   # MCP server: scheduled_task_create/list/delete
+  mcp-profile.ts                 # MCP server: user_profile_read/update
+  mcp-memory.ts                  # MCP server: memory_store/recall/list/delete/forget + vector embeddings
+  mcp-swarm.ts                   # MCP server: swarm_chat_send (conditional on SWARM_CHAT_TOPIC)
+  mcp-nix.ts                     # MCP server: nix_search/add/list_installed/remove/upgrade
+  mcp-file.ts                    # MCP server: file_send (send files to Telegram)
+ui/                              # React/Vite SPA (dark theme, indigo accent)
+  src/pages/                     # Dashboard, Agents, Conversations, Tasks, Secrets, Swarms
+  src/components/Login.tsx       # Session-based login form
+  src/components/SwarmGraph.tsx   # SVG-based visual graph editor for swarm topology
+  src/hooks/useWebSocket.ts      # Real-time WebSocket event hook
+config/praktor.example.yaml      # Example configuration
+```
+
+## Key Commands
+
+```sh
+go run ./cmd/praktor version           # Print version
+go run ./cmd/praktor gateway           # Start the gateway (needs config)
+CGO_ENABLED=0 go build ./cmd/praktor   # Build static binary
+CGO_ENABLED=0 go build ./cmd/ptask     # Build ptask CLI
+CGO_ENABLED=0 go test ./internal/...   # Run all tests
+make lint                              # Run golangci-lint
+./praktor backup -f backup.tar.zst     # Back up all praktor Docker volumes
+./praktor restore -f backup.tar.zst    # Restore volumes (-overwrite to replace)
+docker compose build agent             # Build the agent image
+docker compose up -d                   # Run full stack (pulls gateway from GHCR)
+```
+
+Note: On this system, binaries must be built with `CGO_ENABLED=0` due to the nix dynamic linker. The `modernc.org/sqlite` driver is pure Go and does not require CGO.
+
+## Local Toolchain (mise)
+
+Local dev tooling is pinned in `mise.toml` (`mise install` to provision):
+
+- `go`, `golangci-lint` — Go build/test/lint
+- `node` — UI build (`cd ui && npm install && npm run build`), agent-runner bundling, vitest
+- `nats` — debug NATS topics on the embedded bus (from `natscli`)
+- `jq` — JSON parsing for logs and API responses
+
+`sqlite3` is expected to be available from the system package manager (it isn't in mise — the asdf plugin is broken and most systems already provide it).
+
+With mise managing node, run `npm`/`npx` directly on the host for UI and agent-runner work — Docker is no longer required for those.
+
+Docker is still required at runtime: the gateway spawns agent containers via the Docker API.
+
+## Configuration
+
+Loaded from YAML (default: `config/praktor.yaml`, override with `PRAKTOR_CONFIG` env var). Environment variables take precedence over YAML values:
+
+| Env Var | Config Key | Purpose |
+|---------|-----------|---------|
+| `PRAKTOR_TELEGRAM_TOKEN` | `telegram.token` | Telegram bot token |
+| `ANTHROPIC_API_KEY` | `defaults.anthropic_api_key` | Anthropic API key for agents |
+| `CLAUDE_CODE_OAUTH_TOKEN` | `defaults.oauth_token` | Claude Code OAuth token |
+| `PRAKTOR_WEB_PASSWORD` | `web.auth` | Password for web UI (session-based + Basic Auth fallback) |
+| `PRAKTOR_WEB_PORT` | `web.port` | Web UI port (default: 8080) |
+| `PRAKTOR_AGENT_MODEL` | `defaults.model` | Override default Claude model |
+| `PRAKTOR_VAULT_PASSPHRASE` | `vault.passphrase` | Encryption passphrase for secrets vault |
+| `AGENTMAIL_API_KEY` | `agentmail.api_key` | AgentMail API key for email capabilities (optional) |
+| `OPENAI_API_KEY` | `speech.api_key` | OpenAI API key for voice transcription (STT) and synthesis (TTS) |
+
+Hardcoded paths (not configurable): `data/praktor.db` (SQLite), `data/agents` (agent workspaces).
+
+The `telegram.main_chat_id` setting specifies which Telegram chat receives scheduled task results and swarm results launched from Mission Control.
+
+### Agent Definitions
+
+Agents are defined in the `agents` map in YAML config. Each agent has:
+- `description` - Used for smart routing
+- `model` - Override default model
+- `image` - Override default container image
+- `workspace` - Volume suffix (defaults to agent name)
+- `env` - Per-agent environment variables (supports `secret:name` references resolved from vault)
+- `files` - Secret files injected into container at start (`secret`, `target`, `mode`)
+- `allowed_tools` - Restrict Claude tools
+- `claude_md` - Relative path to agent-specific CLAUDE.md
+- `nix_enabled` - Enable nix package manager in agent container (starts nix-daemon)
+- `agentmail_inbox_id` - AgentMail inbox ID for email capabilities (optional, requires `agentmail.api_key`)
+
+The `router.default_agent` must reference an existing agent.
+
+### Agent Extensions
+
+Extensions are stored per-agent in normalized DB tables (not YAML config) and managed via the REST API + Mission Control UI. They allow adding MCP servers, plugins, and skills to individual agents. Extensions require `nix_enabled: true` on the agent.
+
+**Key files:**
+- `internal/extensions/types.go` — `AgentExtensions`, `MCPServerConfig`, `MarketplaceConfig`, `PluginConfig`, `SkillConfig`
+- `internal/store/extensions.go` — Extension CRUD: reads/writes normalized tables (`agent_mcp_servers`, `agent_marketplaces`, `agent_plugins`, `agent_skills`), assembles `AgentExtensions` JSON
+- `internal/agent/extensions.go` — Loads extensions from DB, resolves secrets, passes as `AGENT_EXTENSIONS` env var
+- `internal/web/api_extensions.go` — GET/PUT `/api/agents/definitions/{id}/extensions`
+- `agent-runner/src/extensions.ts` — Applies extensions at container startup (nix deps, MCP servers, skills, plugins)
+- `ui/src/components/AgentExtensions.tsx` — UI component with tabs for each extension type
+
+**Extension types:**
+- `marketplaces` — Plugin marketplace sources registered via `claude plugin marketplace add` before plugin installation. `MarketplaceConfig`: `Source string` (required: `owner/repo`, git URL, or URL), `Name string` (optional override, derived from source if omitted).
+- `mcp_servers` — Merged into the `query()` SDK call alongside built-in MCP servers. Supports `secret:name` env/header references.
+- `plugins` — Installed via `claude plugin install` on container start. Requires marketplace to be registered first (except `claude-plugins-official` which is built-in). Persisted on home volume.
+- `skills` — Written to `~/.claude/skills/{name}/SKILL.md` on container start. Removed skills have their directories cleaned up automatically.
+
+**DB tables:** Extensions are stored in four normalized tables (`agent_mcp_servers`, `agent_marketplaces`, `agent_plugins`, `agent_skills`) with `agent_id` as foreign key and `ON DELETE CASCADE`. A one-time idempotent migration populates these tables from the legacy `agents.extensions` JSON blob on startup.
+
+Updating extensions via PUT stops the running agent container so it picks up changes on the next message.
+
+### Hot Config Reload
+
+The gateway watches the config file for changes (mtime polled every 3s, SHA-256 hash verified on mtime change). When a change is detected, it automatically reloads without restarting the gateway process. SIGHUP also triggers a reload.
+
+**Reloadable:** Agent definitions (all fields), defaults (model, image, max_running, idle_timeout), router.default_agent, scheduler poll_interval, telegram main_chat_id.
+
+**Not reloadable** (warning logged): telegram.token, web.port, nats.data_dir, vault.passphrase, agentmail.api_key, speech.api_key.
+
+Running agents whose config changed are stopped and lazily restarted on the next message. Added agents become routable immediately. Removed agents are stopped.
+
+Key implementation files: `internal/config/diff.go` (config diffing), `cmd/praktor/main.go` (`watchConfigFile`, `reloadConfig`).
+
+### Web Authentication
+
+Mission Control uses cookie-based session auth with a login page. When `web.auth` is set:
+
+- **Login:** `POST /api/login` with `{"password":"..."}` creates a session (32-byte random token, hex-encoded) stored in-memory on the Server struct (`map[string]time.Time`, mutex-protected). Session cookie: `HttpOnly; SameSite=Strict; Path=/`, 30-day expiry, refreshed on each request.
+- **Auth check:** `GET /api/auth/check` returns 204 (no auth configured), 200 (valid session), or 401 (unauthenticated). Used by UI on load.
+- **Logout:** `POST /api/logout` clears cookie and deletes session from map.
+- **Middleware:** All `/api/*` routes require valid session cookie, except `/api/login` and `/api/auth/check` (public). WebSocket (`/api/ws`) is also protected — browsers send cookies on upgrade automatically.
+- **Basic Auth fallback:** `Authorization: Basic` header is accepted for programmatic API access (same password check, no session created).
+- **UI:** `App.tsx` checks auth on mount, shows `Login.tsx` if unauthenticated. Sidebar has a "Sign out" button.
+
+Key implementation: `internal/web/server.go` (session store, handlers, middleware), `ui/src/components/Login.tsx`, `ui/src/App.tsx` (auth gate).
+
+## NATS Topics
+
+```
+agent.{agentID}.input           # Host → Container: user messages (includes msg_id for correlation)
+agent.{agentID}.output          # Container → Host: agent responses (text, result) with msg_id
+agent.{agentID}.control         # Host → Container: shutdown, ping
+agent.{agentID}.route           # Host → Container: routing classification queries
+host.ipc.{agentID}              # Container → Host: IPC commands
+swarm.{swarmID}.chat.{groupID}  # Inter-agent collaborative chat within a swarm group
+swarm.{swarmID}.*               # Other inter-agent swarm communication
+events.swarm.{swarmID}          # Swarm lifecycle events (started, agent_started, tier_completed, completed, failed)
+events.>                        # System events (broadcast to WebSocket clients)
+```
+
+## REST API
+
+```
+POST           /api/login                            # Session login (public)
+POST           /api/logout                           # Session logout
+GET            /api/auth/check                       # Session validation (public, 204=no auth, 200=valid, 401=invalid)
+GET            /api/agents/definitions              # List agent definitions
+GET            /api/agents/definitions/{id}          # Agent details
+GET            /api/agents/definitions/{id}/messages # Message history
+GET            /api/agents                           # Active agent containers
+GET/POST       /api/tasks                            # List/create scheduled tasks
+PUT/DELETE     /api/tasks/{id}                       # Update/delete task
+DELETE         /api/tasks/completed                  # Delete all completed tasks
+GET/POST       /api/secrets                          # List/create secrets
+GET/PUT/DELETE /api/secrets/{id}                     # Get/update/delete secret
+GET/PUT        /api/agents/definitions/{id}/secrets  # List/set agent secret assignments
+POST/DELETE    /api/agents/definitions/{id}/secrets/{secretId}  # Add/remove agent secret
+GET/POST       /api/swarms                           # List/create swarm runs
+GET/DELETE     /api/swarms/{id}                      # Swarm status / delete
+GET/PUT        /api/agents/definitions/{id}/agent-md   # Read/update per-agent AGENT.md
+GET/PUT        /api/agents/definitions/{id}/extensions # Read/update agent extensions (MCP servers, plugins, skills)
+GET/PUT        /api/user-profile                      # Read/update USER.md
+GET            /api/status                           # System health
+WS             /api/ws                               # WebSocket for real-time events
+```
+
+## Container Mount Strategy
+
+All containers use Docker named volumes (no host path dependencies):
+
+| Volume | Container Path | Mode | Purpose |
+|--------|---------------|------|---------|
+| `praktor-wk-{workspace}` | `/workspace/agent` | rw | Agent workspace |
+| `praktor-global` | `/workspace/global` | ro | Global instructions |
+| `praktor-home-{workspace}` | `/home/praktor` | rw | Agent home directory |
+
+The gateway uses `praktor-data` for SQLite/NATS and `praktor-global` for global instructions. Both gateway and agents run as non-root user `praktor` (uid 10321).
+
+## Container Security Hardening
+
+Agent containers are hardened via `defaults.security` (reloadable; per-agent override via `security:` on an agent definition, `nil` inherits defaults). Built-in profile is "Balanced". Applied in `internal/container/manager.go` (`applySecurity`) onto the Docker `HostConfig`:
+
+| Field | Default | Effect |
+|-------|---------|--------|
+| `no_new_privileges` | `true` | `--security-opt no-new-privileges=true` (blocks setuid escalation; `docker exec --user root` still works — daemon-granted, not setuid) |
+| `drop_capabilities` | `true` | `--cap-drop ALL` then `--cap-add` the list below |
+| `add_capabilities` | `[CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID]` | needed for the root `chown` exec + nix build-user switching |
+| `pids_limit` | `1024` | `--pids-limit` (0 = unlimited) |
+| `memory_mb` / `cpus` | `0` / `0` | per-container memory/CPU caps (0 = unlimited) |
+| `tmpfs` | `true` | tmpfs `/tmp` (`nosuid`) + `/var/tmp` (`noexec,nosuid`) |
+| `readonly_rootfs` | `false` | writable only via volumes + tmpfs |
+
+**Stack caveats:** `no_new_privileges` has **no impact on Chromium** here — agent-browser always launches Chromium with `--no-sandbox` (Docker's default seccomp blocks the `unshare(CLONE_NEWUSER)` the in-process sandboxes need), so the constraint is the container's seccomp/caps, not the host, and host unprivileged-userns support is irrelevant. Because the setuid sandbox never runs, `chromium-sandbox` is intentionally not installed in `Dockerfile.agent-base` (one fewer setuid-root binary). `drop_capabilities` removes `CAP_SYS_ADMIN`, but this has **no impact on nix**: the agent image sets `max-jobs = 0` in `/etc/nix/nix.conf`, so nix only installs prebuilt packages from the binary cache and never builds locally — it never needs the build sandbox. (If you re-enable source builds, add `SYS_ADMIN` back.) The temp volume-IO containers (`ReadVolumeFile`/`WriteVolumeFile`) are unhardened by design — they only run `true` and copy files.
+
+## Go Dependencies
+
+- `mymmrac/telego` - Telegram bot
+- `docker/docker` - Docker SDK for container management
+- `nats-io/nats-server/v2` - Embedded NATS server
+- `nats-io/nats.go` - NATS client
+- `modernc.org/sqlite` - Pure-Go SQLite (no CGO)
+- `gorilla/websocket` - WebSocket connections
+- `google/uuid` - UUID generation
+- `adhocore/gronx` - Cron expression parsing
+- `klauspost/compress` - Zstd compression for backup/restore
+- `gopkg.in/yaml.v3` - YAML config parsing
+
+## Swarm Orchestration
+
+Swarms are graph-based: agents are nodes, connections ("synapses") define execution patterns, and a lead agent synthesizes results.
+
+**Three orchestration patterns** defined by synapse types:
+- **No connection** → Fan-out: agents run in parallel, independently
+- **A → B directed** → Pipeline: B waits for A, receives A's output as context
+- **A ↔ B bidirectional** → Collaborative: agents share a real-time NATS chat channel
+
+The lead agent always runs last and receives all prior results for synthesis.
+
+**Key files:**
+- `internal/swarm/types.go` — `SwarmRequest`, `SwarmAgent`, `Synapse`, `AgentResult`
+- `internal/swarm/graph.go` — `BuildPlan()`: topological sort, collab group detection (union-find), cycle detection, tier assignment
+- `internal/swarm/graph_test.go` — Unit tests for all graph topologies
+- `internal/swarm/coordinator.go` — Tier-based DAG execution, secret resolution, event publishing, swarm membership tracking
+- `ui/src/components/SwarmGraph.tsx` — SVG visual graph editor (drag nodes, draw edges, toggle direction, edit mode with initialData)
+- `ui/src/pages/Swarms.tsx` — Create/list views with edit, delete, and replay buttons per swarm
+
+**Execution flow:**
+1. `BuildPlan()` analyzes the graph → produces ordered `ExecutionTier`s, `CollabGroups`, and `PipelineInputs`
+2. Coordinator executes tier-by-tier; within each tier, agents run in parallel via WaitGroup
+3. Pipeline agents receive predecessor outputs prepended to their prompt
+4. Collaborative agents get `SWARM_CHAT_TOPIC` env var → agent-runner subscribes to chat, buffers messages, and provides `swarm_chat_send` MCP tool
+5. Lead agent (last tier) receives all previous results in a synthesis prompt
+
+**Telegram syntax** (`@swarm` prefix):
+- `@swarm agent1,agent2,agent3: task` → fan-out, first agent = lead
+- `@swarm agent1>agent2>agent3: task` → pipeline, last agent = lead
+- `@swarm agent1<>agent2,agent3: task` → agent1↔agent2 collaborative + agent3 independent
+
+**API:** `POST /api/swarms` accepts `SwarmRequest` with `agents`, `synapses`, `lead_agent`, `task`, and `name`. Graph is validated via `BuildPlan()` before execution; returns 400 on cycles or unknown roles. `DELETE /api/swarms/{id}` removes a swarm run.
+
+**Result delivery:** Swarms launched from Telegram deliver results to the originating chat. Swarms launched from Mission Control deliver results to `telegram.main_chat_id`.
+
+**WebSocket events:** `swarm_started`, `swarm_agent_started`, `swarm_agent_completed`, `swarm_tier_completed`, `swarm_completed`, `swarm_failed` — published on `events.swarm.{swarmID}`.
+
+**DB columns:** `swarm_runs` table includes `name`, `synapses` (JSON), `lead_agent` (added via ALTER TABLE migrations that ignore duplicate column errors).
+
+## SQLite Schema
+
+Tables: `agents`, `messages` (with agent_id index), `scheduled_tasks` (with status+next_run index), `agent_sessions`, `swarm_runs`, `secrets`, `agent_secrets`, `agent_mcp_servers`, `agent_marketplaces`, `agent_plugins`, `agent_skills`. Virtual tables: `messages_fts` (FTS5). Migrations run automatically on startup.
+
+## MCP Server Convention
+
+Each MCP tool domain lives in its own file under `agent-runner/src/mcp-*.ts`. To add a new MCP server:
+
+1. Create `agent-runner/src/mcp-{domain}.ts` with its own `McpServer` instance + `StdioServerTransport`
+2. If it needs NATS IPC, import `sendIPC` from `./ipc.js`
+3. Add an esbuild entry in `Dockerfile.agent` to bundle it as `out/mcp-{domain}.js`
+4. Register it in `agent-runner/src/index.ts` under `mcpServers` with `command: "node", args: ["/app/mcp-{domain}.js"]`
+5. The `allowedTools` wildcard `"mcp__praktor-*"` covers all `praktor-*` named servers automatically
+
+## Browser Automation (agent-browser)
+
+All agent containers include [agent-browser](https://github.com/vercel-labs/agent-browser) and are configured to use the system Chromium on Debian. Agents drive the browser exclusively through agent-browser's typed **MCP server** (`agent-browser mcp`, v0.28.0+) — the older Bash-command interface and its `core` usage-guide skill were removed after the MCP path was verified to produce byte-identical results at the same context cost (~5k tokens, cacheable).
+
+**Build-time setup** (`Dockerfile.agent-base`):
+- The prebuilt `agent-browser` binary is downloaded from the GitHub release (pinned by `AGENT_BROWSER_VERSION`) to `/usr/local/bin/agent-browser` and verified against SHA-256
+- A `config.json` is generated at `/usr/local/share/agent-browser/config.json` pointing to system Chromium at `/usr/bin/chromium` (the usage-guide skill is no longer fetched — the MCP server provides tool schemas directly)
+
+**Runtime setup** (`agent-runner/src/index.ts` → `setupAgentBrowser()`):
+- Symlinks `/usr/local/share/agent-browser/config.json` → `/home/praktor/.agent-browser/config.json` (agent-browser resolves config from `~/.agent-browser/`)
+- Symlinks (not copies) ensure agents always use the image's version — updates come from rebuilding the image
+- Cleans up stale skill symlinks from previous image versions (`playwright-cli`, the old `agent-browser` skill, and the `core` usage-guide skill)
+
+**Browser lifecycle:** The browser session persists across messages within the same agent session. Everything shuts down with the container on idle timeout.
+
+**MCP server** (`agent-runner/src/index.ts`): `agent-browser mcp --tools <profile>` is registered as the `agent-browser` MCP server, so tools surface as `mcp__agent-browser__*`. The tool profile defaults to `core` and is overridable per-agent via `AGENT_BROWSER_MCP` in the agent's `env` (composable, e.g. `core,network,react` — see `agent-browser mcp --help`). The system prompt points agents at the `agent_browser_*` tools, and `mcp__agent-browser__*` is auto-allowlisted for tool-restricted agents. A prompt section also tells agents that agent-browser is pre-installed and to never install browsers via npm, npx, or nix.
+
+## What it supports
+
+- Telegram I/O - Message Claude from your phone
+- Named agents - Multiple agents with distinct roles, models, and configurations
+- Smart routing - `@agent_name` prefix or AI-powered routing via default agent
+- Isolated agent context - Each agent has its own CLAUDE.md memory, isolated filesystem, and runs in its own container sandbox
+- Persistent memory - SQLite-backed per-agent memory (`/workspace/agent/memory.db`) with MCP tools (memory_store, memory_recall, memory_list, memory_delete, memory_forget). Uses hybrid search combining FTS5 keyword matching with vector semantic similarity (all-MiniLM-L6-v2, 384 dims, quantized int8 via `@huggingface/transformers`) using Reciprocal Rank Fusion. Embeddings are computed async on store and backfilled on first MCP server start for existing memories. Existing memory keys are listed in the system prompt so agents know what's stored.
+- Scheduled tasks - Cron/interval/relative delay (+30s, +5m, +2h)/one-shot jobs that run Claude and deliver results. Tasks execute in parallel (up to `MAX_PARALLEL_TASKS`, default 3) with fresh sessions, while regular user messages remain sequential with conversation continuity
+- Web access - Agents can use WebSearch and WebFetch tools
+- Nix package manager - Agents with `nix_enabled: true` can install packages on demand via MCP tools (nix_search, nix_add, nix_list_installed, nix_remove, nix_upgrade). Installs are binary-only (`max-jobs = 0` in the image's nix.conf): nix fetches prebuilt packages from the cache and never builds from source, so it works under the hardened cap-drop profile. When nix-daemon is detected, the system prompt instructs agents to auto-install missing tools. The `/nix` Telegram command provides direct user control over agent packages.
+- File sending - Agents can send files (screenshots, PDFs, etc.) to Telegram via the `file_send` MCP tool. Images are sent as photos, other files as documents. Max 12MB per file.
+- File receiving - Files sent to the bot in Telegram (documents, photos, audio, video, voice, video notes, animations) are downloaded and saved to the agent's workspace at `/workspace/agent/uploads/{timestamp}_{filename}`. The agent receives the file path in the message. Supports Telegram's 20MB download limit.
+- Voice transcription (STT) - Voice messages and video notes are automatically transcribed to text via OpenAI Whisper API. Agents receive `[Voice message] <transcribed text>` instead of raw audio files. Requires `OPENAI_API_KEY`. Falls back to file attachment on transcription failure.
+- Voice responses (TTS) - When `speech.tts_enabled` is true, agent responses can be sent back as Telegram voice messages via OpenAI TTS API. `tts_mode`: `"voice"` (respond with voice only when user sends voice), `"always"` (all responses), `"never"` (disabled). Configurable voice (alloy, echo, fable, onyx, nova, shimmer).
+- Browser automation - [agent-browser](https://github.com/vercel-labs/agent-browser) pre-installed with system Chromium, exposed as typed `mcp__agent-browser__*` MCP tools. Browser session persists across messages, shuts down with container.
+- Container isolation - Agents sandboxed in Docker containers with NATS communication
+- Agent swarms - Graph-based orchestration: fan-out (parallel), pipeline (sequential with context passing), and collaborative (real-time chat) execution patterns. Visual graph editor in Mission Control, `@swarm` Telegram integration
+- Secure vault - AES-256-GCM encrypted secrets, injected as env vars or files at container start (never exposed to LLM)
+- AgentMail integration - Agents with `agentmail_inbox_id` can send and receive email via the agentmail CLI. Gateway maintains a WebSocket connection to AgentMail for real-time `message.received` events, which are dispatched to the appropriate agent. Each agent is locked to its own inbox ID.
+- Backup & restore - `praktor backup` and `praktor restore` create/restore zstd-compressed tarballs of all `praktor-*` Docker volumes
+- Hot config reload - Config file changes are detected automatically (file polling every 3s) or via SIGHUP; only affected agents are restarted
+- Mission Control UI - Real-time dashboard with WebSocket updates
+- Telegram slash commands — registered via `SetMyCommands` with `th.CommandEqual()` predicates. Agent resolved from arg or last-used agent for the chat (`/start` falls back to default agent). **When adding a new command, also add it to the `/commands` handler output and the list below.**
+  - `/agents` — List available agents (id, description, status, model, messages)
+  - `/commands` — Show available commands
+  - `/start [agent]` — Say hello to an agent
+  - `/stop [agent]` — Abort the active run and drain the message queue (container stays running)
+  - `/reset [agent]` — Clear session context for a fresh conversation
+  - `/nix <action> [package] [@agent]` — Manage nix packages (search, add, list, remove, upgrade)

@@ -1,0 +1,133 @@
+# Build Go CLIs (ptask + getcc) and download Claude Code binary
+FROM golang:1.26.5-trixie AS go-build
+WORKDIR /src
+COPY . .
+RUN go mod download
+RUN CGO_ENABLED=0 go build -o /ptask ./cmd/ptask
+RUN CGO_ENABLED=0 go build -o /getcc ./cmd/getcc
+
+# Runtime image — Debian-based (glibc, no musl compatibility issues)
+FROM debian:trixie-slim
+
+# Install system packages.
+# chromium-sandbox is intentionally omitted: agent-browser always launches
+# Chromium with --no-sandbox (Docker's default seccomp blocks the
+# unshare(CLONE_NEWUSER) the in-process sandboxes need), so the setuid-root
+# chrome-sandbox helper would never run — it would only be unused attack surface.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    ca-certificates \
+    chromium \
+    curl \
+    git \
+    jq \
+    locales \
+    procps \
+    tini \
+    tzdata \
+    wget \
+    xdg-utils \
+    xz-utils \
+    fonts-noto-color-emoji \
+    fonts-noto-cjk \
+    fonts-freefont-ttf \
+    nix-setup-systemd \
+    && sed -i 's/^# *\(en_US.UTF-8\)/\1/' /etc/locale.gen \
+    && locale-gen \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# enable nix-command and flakes; force binary-only installs.
+# max-jobs = 0 makes nix never build locally — it only fetches prebuilt
+# packages from the binary cache and errors out if none exists, instead of
+# compiling from source. This also means nix never needs the build sandbox
+# (CAP_SYS_ADMIN), so it works under the hardened cap-drop profile.
+RUN printf '%s\n' \
+    "extra-experimental-features = nix-command flakes" \
+    "max-jobs = 0" \
+    "substitute = true" \
+    "fallback = false" \
+    >> /etc/nix/nix.conf
+
+# Install Node.js 24 + npm from NodeSource
+RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean
+
+RUN useradd \
+   --create-home \
+   --home-dir "/home/praktor" \
+   --shell "/bin/bash" \
+   --uid 10321 \
+   praktor && \
+   usermod -aG nix-users praktor
+
+# Copy built artifacts from builder stages
+COPY --from=go-build /ptask /usr/local/bin/ptask
+COPY --from=go-build /getcc /usr/local/bin/getcc
+RUN NPM_GLOBAL=$(npm root -g) && \
+    npm install --loglevel=error -g agentmail-cli@0.7.12 @huggingface/transformers@3 && \
+    rm -rf -- /root/.npm /tmp/node-compile-cache && \
+    cd "$NPM_GLOBAL/@huggingface/transformers/node_modules" && \
+    rm -rf onnxruntime-node && mkdir -p onnxruntime-node && \
+    echo '{"name":"onnxruntime-node","main":"index.js"}' > onnxruntime-node/package.json && \
+    printf '%s\n' \
+      'const ort=require("onnxruntime-web");' \
+      'const path=require("path");' \
+      'const wasmDir=path.join(__dirname,"..","onnxruntime-web","dist");' \
+      'ort.env.wasm.wasmPaths="file://"+wasmDir+"/";' \
+      'ort.env.wasm.numThreads=1;' \
+      'module.exports=ort;' \
+      > onnxruntime-node/index.js
+
+# Install agent-browser binary from GitHub release
+ARG AGENT_BROWSER_VERSION=v0.32.3
+RUN ARCH=$(dpkg --print-architecture) && \
+    if [ "$ARCH" = "amd64" ]; then \
+      AB_ARCH="linux-x64"; \
+      AB_SHA256="243f6e01c4b7dea53ad07d9754df99033c614582d5c685c529a1cb81cafc3ab1"; \
+    elif [ "$ARCH" = "arm64" ]; then \
+      AB_ARCH="linux-arm64"; \
+      AB_SHA256="87fd2efb67995fc433569f0383260bfee44a785d6d45ca07c77179c45b70de18"; \
+    else \
+      echo "Unsupported architecture: $ARCH" && exit 1; \
+    fi && \
+    curl -fsSL "https://github.com/vercel-labs/agent-browser/releases/download/${AGENT_BROWSER_VERSION}/agent-browser-${AB_ARCH}" \
+      -o /usr/local/bin/agent-browser && \
+    echo "${AB_SHA256}  /usr/local/bin/agent-browser" | sha256sum -c - && \
+    chmod 555 /usr/local/bin/agent-browser
+
+# Generate agent-browser config pointing at the system Chromium. Agents drive
+# the browser through `agent-browser mcp` (typed tools), so the usage-guide
+# skill (skill-data/core SKILL.md + references + templates) is not fetched.
+RUN mkdir -p /usr/local/share/agent-browser && \
+    echo '{"contentBoundaries":true,"downloadPath":"/workspace/agent/Downloads","executablePath":"/usr/bin/chromium","args":"--disable-gpu,--disable-dev-shm-usage"}' \
+      > /usr/local/share/agent-browser/config.json
+
+# Pre-download embedding model for semantic memory search
+ENV TRANSFORMERS_CACHE=/opt/models
+ENV NODE_PATH=/usr/lib/node_modules
+RUN mkdir -p /opt/models && \
+    node -e "const{pipeline}=require('@huggingface/transformers');pipeline('feature-extraction','Xenova/all-MiniLM-L6-v2',{dtype:'q8',cache_dir:'/opt/models'}).then(()=>console.log('model downloaded'))" && \
+    chown -R praktor:praktor /opt/models
+
+# Download agentmail-cli skill for agents with email capabilities
+RUN mkdir -p /opt/agentmail-skill && \
+    curl -so /opt/agentmail-skill/SKILL.md \
+    https://raw.githubusercontent.com/agentmail-to/agentmail-skills/main/agentmail-cli/SKILL.md
+
+# Pre-create volume mount points with correct ownership so Docker
+# populates new named volumes with the right permissions and structure.
+RUN mkdir -p /workspace/agent /workspace/global && \
+    chown -R praktor:praktor /workspace/agent /workspace/global && \
+    chmod 0700 /home/praktor
+
+# Runtime config
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+ENV AGENT_BROWSER_IDLE_TIMEOUT_MS=180000
+ENV DISABLE_AUTOUPDATER=true
+ENV NIX_PROFILES="/nix/var/nix/profiles/default /home/praktor/.nix-profile"
+ENV NIX_SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+ENV PATH="/home/praktor/bin:/home/praktor/.nix-profile/bin:/nix/var/nix/profiles/default/bin:${PATH}"
