@@ -52,6 +52,14 @@ Edit `.env` and fill in your credentials (see comments in the file for details).
 grep docker /etc/group    # look for the docker group GID
 ```
 
+Backend selection is controlled by `AGENT_BACKEND`:
+
+```env
+AGENT_BACKEND=auto
+```
+
+In `auto` mode, Praktor uses ADK when vLLM/OpenAI-compatible or Gemini credentials are present (`VLLM_BASE_URL`, `VLLM_API_KEY`, `ADK_MODEL`, `GEMINI_API_KEY`, or `GOOGLE_API_KEY`). If those are not configured but `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` is present, it uses the Claude Agent SDK fallback. You can force either path with `AGENT_BACKEND=adk` or `AGENT_BACKEND=claude`.
+
 Edit `config/praktor.yaml` to define your agents:
 
 ```yaml

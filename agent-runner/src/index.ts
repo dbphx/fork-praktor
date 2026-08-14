@@ -13,6 +13,11 @@ import {
   type MCPConnectionParams,
   type ToolUnion,
 } from "@google/adk";
+import {
+  query as queryClaude,
+  type McpServerConfig as ClaudeMcpServerConfig,
+  type SDKMessage,
+} from "@anthropic-ai/claude-agent-sdk";
 import { NatsBridge } from "./nats-bridge.js";
 import { applyExtensions } from "./extensions.js";
 import type { MCPServerConfig } from "./extensions.js";
@@ -37,6 +42,8 @@ console.error = (...args: unknown[]) => origError(ts(), ...args);
 
 const NATS_URL = process.env.NATS_URL || "nats://localhost:4222";
 const AGENT_ID = process.env.AGENT_ID || process.env.GROUP_ID || "default";
+type AgentBackend = "adk" | "claude";
+
 function resolveAdkModel(): string {
   if (process.env.VLLM_MODEL) return process.env.VLLM_MODEL;
   if (process.env.ADK_MODEL) return process.env.ADK_MODEL;
@@ -47,6 +54,34 @@ function resolveAdkModel(): string {
 const ADK_MODEL = resolveAdkModel();
 const VLLM_BASE_URL = process.env.VLLM_BASE_URL || process.env.OPENAI_BASE_URL || "";
 const VLLM_API_KEY = process.env.VLLM_API_KEY || process.env.OPENAI_API_KEY || "";
+function resolveClaudeModel(): string {
+  const model = process.env.CLAUDE_MODEL || "";
+  return model.startsWith("claude-") ? model : "claude-opus-4-7";
+}
+const CLAUDE_MODEL = resolveClaudeModel();
+const HAS_ADK_CREDENTIALS = Boolean(
+  process.env.VLLM_BASE_URL ||
+  process.env.OPENAI_BASE_URL ||
+  process.env.VLLM_API_KEY ||
+  process.env.ADK_MODEL ||
+  process.env.GEMINI_API_KEY ||
+  process.env.GOOGLE_API_KEY
+);
+const HAS_CLAUDE_CREDENTIALS = Boolean(
+  process.env.ANTHROPIC_API_KEY ||
+  process.env.CLAUDE_CODE_OAUTH_TOKEN
+);
+function resolveAgentBackend(): AgentBackend {
+  const configured = (process.env.AGENT_BACKEND || "auto").trim().toLowerCase();
+  if (configured === "adk" || configured === "claude") return configured;
+  if (configured !== "auto") {
+    console.warn(`[agent] unknown AGENT_BACKEND=${configured}, using auto`);
+  }
+  if (HAS_ADK_CREDENTIALS) return "adk";
+  if (HAS_CLAUDE_CREDENTIALS) return "claude";
+  return "adk";
+}
+const AGENT_BACKEND = resolveAgentBackend();
 const ALLOWED_TOOLS_ENV = process.env.ALLOWED_TOOLS || "";
 const MAX_TURNS = parseInt(process.env.MAX_TURNS || "200", 10);
 const SWARM_CHAT_TOPIC = process.env.SWARM_CHAT_TOPIC || "";
@@ -637,9 +672,7 @@ function toAdkMcpConnection(srv: MCPServerConfig): MCPConnectionParams {
   };
 }
 
-function buildMcpToolsets(): MCPToolset[] {
-  const tools = parseAllowedTools(ALLOWED_TOOLS_ENV);
-
+function buildMcpServers(): Record<string, MCPServerConfig> {
   const mcpServers: Record<string, MCPServerConfig> = {
     "praktor-tasks": {
       type: "stdio",
@@ -698,9 +731,37 @@ function buildMcpToolsets(): MCPToolset[] {
     };
   }
 
-  return Object.entries(mcpServers).map(([name, srv]) => {
+  return mcpServers;
+}
+
+function buildMcpToolsets(): MCPToolset[] {
+  const tools = parseAllowedTools(ALLOWED_TOOLS_ENV);
+
+  return Object.entries(buildMcpServers()).map(([name, srv]) => {
     return new MCPToolset(toAdkMcpConnection(srv), tools || [], sanitizeToolPrefix(name));
   });
+}
+
+function toClaudeMcpServer(srv: MCPServerConfig): ClaudeMcpServerConfig {
+  if (srv.type === "stdio") {
+    return {
+      type: "stdio",
+      command: srv.command,
+      args: srv.args || [],
+      env: srv.env,
+    };
+  }
+  return {
+    type: "http",
+    url: srv.url,
+    headers: srv.headers,
+  };
+}
+
+function buildClaudeMcpServers(): Record<string, ClaudeMcpServerConfig> {
+  return Object.fromEntries(
+    Object.entries(buildMcpServers()).map(([name, srv]) => [name, toClaudeMcpServer(srv)])
+  );
 }
 
 function buildRunner(): { runner: Runner; toolsets: MCPToolset[] } {
@@ -747,6 +808,128 @@ async function* runAdk(
       try { await toolset.close(); } catch { /* ignore */ }
     }
   }
+}
+
+interface AgentRunEvent {
+  backend: AgentBackend;
+  partial: boolean;
+  final: boolean;
+  text: string;
+  toolNames: string[];
+  terminalReason?: string;
+  sessionId?: string;
+}
+
+async function* runAgent(
+  prompt: string,
+  sessionId: string,
+  abortController: AbortController,
+  opts: { maxTurns?: number; routing?: boolean; resume?: boolean } = {}
+): AsyncGenerator<AgentRunEvent, void, undefined> {
+  if (AGENT_BACKEND === "claude") {
+    yield* runClaude(prompt, abortController, opts);
+    return;
+  }
+
+  for await (const event of runAdk(prompt, sessionId, abortController.signal)) {
+    yield {
+      backend: "adk",
+      partial: Boolean(event.partial),
+      final: isFinalResponse(event),
+      text: eventText(event),
+      toolNames: eventToolNames(event),
+      terminalReason: event.errorCode || undefined,
+      sessionId,
+    };
+    if (event.errorCode || event.errorMessage) break;
+  }
+}
+
+async function* runClaude(
+  prompt: string,
+  abortController: AbortController,
+  opts: { maxTurns?: number; routing?: boolean; resume?: boolean } = {}
+): AsyncGenerator<AgentRunEvent, void, undefined> {
+  const allowedTools = parseAllowedTools(ALLOWED_TOOLS_ENV);
+  const result = queryClaude({
+    prompt,
+    options: {
+      abortController,
+      cwd: "/workspace/agent",
+      model: CLAUDE_MODEL,
+      pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+      maxTurns: opts.maxTurns ?? MAX_TURNS,
+      mcpServers: opts.routing ? {} : buildClaudeMcpServers(),
+      allowedTools,
+      includePartialMessages: true,
+      resume: opts.resume ? lastSessionId : undefined,
+      env: {
+        ...process.env,
+        CLAUDE_AGENT_SDK_CLIENT_APP: "praktor-agent-runner",
+      },
+    },
+  });
+
+  for await (const message of result) {
+    yield claudeMessageToRunEvent(message);
+  }
+}
+
+function claudeMessageToRunEvent(message: SDKMessage): AgentRunEvent {
+  if (message.type === "stream_event") {
+    const event = message.event as unknown as Record<string, unknown>;
+    const delta = (event.delta || {}) as Record<string, unknown>;
+    const text = typeof delta.text === "string" ? delta.text : "";
+    return {
+      backend: "claude",
+      partial: Boolean(text),
+      final: false,
+      text,
+      toolNames: [],
+      sessionId: message.session_id,
+    };
+  }
+
+  if (message.type === "assistant") {
+    const content = (message.message.content || []) as unknown as Array<Record<string, unknown>>;
+    const text = content
+      .filter((block) => block.type === "text")
+      .map((block) => String(block.text || ""))
+      .join("");
+    const toolNames = content
+      .filter((block) => block.type === "tool_use" && block.name)
+      .map((block) => String(block.name));
+    return {
+      backend: "claude",
+      partial: false,
+      final: false,
+      text,
+      toolNames,
+      terminalReason: message.error,
+      sessionId: message.session_id,
+    };
+  }
+
+  if (message.type === "result") {
+    return {
+      backend: "claude",
+      partial: false,
+      final: true,
+      text: message.subtype === "success" ? message.result : (message.errors || []).join("\n"),
+      toolNames: [],
+      terminalReason: message.terminal_reason || (message.subtype === "success" ? undefined : message.subtype),
+      sessionId: message.session_id,
+    };
+  }
+
+  return {
+    backend: "claude",
+    partial: false,
+    final: false,
+    text: "",
+    toolNames: [],
+    sessionId: "session_id" in message ? String(message.session_id || "") : undefined,
+  };
 }
 
 function eventText(event: Event): string {
@@ -808,31 +991,32 @@ async function executeTask(data: Record<string, unknown>): Promise<void> {
     const controller = new AbortController();
     if (msgId) activeAbortControllers.set(msgId, controller);
     const sessionId = msgId ?? `task-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const result = runAdk(text, sessionId, controller.signal);
+    console.log(`[task] starting ${AGENT_BACKEND} run`);
+    const result = runAgent(text, sessionId, controller, { resume: false });
 
     try {
       for await (const event of result) {
-        if (event.errorCode || event.errorMessage) {
-          terminalReason = event.errorCode || "error";
+        if (event.terminalReason) {
+          terminalReason = event.terminalReason;
           break;
         }
-        for (const name of eventToolNames(event)) {
+        for (const name of event.toolNames) {
           console.log(`[task] tool: ${name}`);
           if (name.endsWith("file_send")) {
             hasFileSent = true;
           }
         }
-        const textChunk = eventText(event);
+        const textChunk = event.text;
         if (textChunk && event.partial) {
           hasStreamedOutput = true;
           await bridge.publishOutput(textChunk, "text", msgId);
-        } else if (textChunk && isFinalResponse(event)) {
+        } else if (textChunk && event.final) {
           fullResponse = textChunk;
         }
       }
     } catch (streamErr) {
       if (fullResponse || hasStreamedOutput || hasFileSent) {
-        console.warn(`[task] adk run exited with error after output, ignoring:`, streamErr);
+        console.warn(`[task] ${AGENT_BACKEND} run exited with error after output, ignoring:`, streamErr);
       } else {
         throw streamErr;
       }
@@ -932,30 +1116,33 @@ async function handleMessage(data: Record<string, unknown>): Promise<void> {
     lastSessionId ||= `${AGENT_ID}-session`;
     const controller = new AbortController();
     currentAbortController = controller;
-    console.log(`[agent] starting adk run`);
-    const result = runAdk(augmentedText, lastSessionId, controller.signal);
+    console.log(`[agent] starting ${AGENT_BACKEND} run`);
+    const result = runAgent(augmentedText, lastSessionId, controller, { resume: true });
 
     try {
       for await (const event of result) {
-        console.log(`[agent] event: author=${event.author ?? "unknown"} partial=${event.partial ? "true" : "false"} final=${isFinalResponse(event) ? "true" : "false"}`);
-        if (event.errorCode || event.errorMessage) {
-          terminalReason = event.errorCode || "error";
+        console.log(`[agent] event: backend=${event.backend} partial=${event.partial ? "true" : "false"} final=${event.final ? "true" : "false"}`);
+        if (event.sessionId) {
+          lastSessionId = event.sessionId;
+        }
+        if (event.terminalReason) {
+          terminalReason = event.terminalReason;
           break;
         }
-        for (const name of eventToolNames(event)) {
+        for (const name of event.toolNames) {
           console.log(`[agent] tool: ${name}`);
         }
-        const textChunk = eventText(event);
+        const textChunk = event.text;
         if (textChunk && event.partial) {
           hasStreamedOutput = true;
           await bridge.publishOutput(textChunk, "text", msgId);
-        } else if (textChunk && isFinalResponse(event)) {
+        } else if (textChunk && event.final) {
           fullResponse = textChunk;
         }
       }
     } catch (streamErr) {
       if (fullResponse || hasStreamedOutput) {
-        console.warn(`[agent] adk run exited with error after output, ignoring:`, streamErr);
+        console.warn(`[agent] ${AGENT_BACKEND} run exited with error after output, ignoring:`, streamErr);
       } else {
         throw streamErr;
       }
@@ -1031,33 +1218,18 @@ async function handleRoute(
     routingPrompt += `User message: ${text}`;
 
     const routeSessionId = `route-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    await sessionService.createSession({
-      appName: "praktor",
-      userId: AGENT_ID,
-      sessionId: routeSessionId,
-    });
-    const routeAgent = new LlmAgent({
-      name: `${sanitizeToolPrefix(AGENT_ID) || "praktor"}_router`,
-      model: buildModel(),
-      instruction: systemPrompt || undefined,
-      tools: [],
-    });
-    const routeRunner = new Runner({
-      appName: "praktor",
-      agent: routeAgent,
-      sessionService,
-    });
-    const result = routeRunner.runAsync({
-      userId: AGENT_ID,
-      sessionId: routeSessionId,
-      newMessage: { role: "user", parts: [{ text: routingPrompt }] },
-      runConfig: { maxLlmCalls: 1 },
-    });
+    const controller = new AbortController();
+    const result = runAgent(
+      systemPrompt ? `${systemPrompt}\n\n${routingPrompt}` : routingPrompt,
+      routeSessionId,
+      controller,
+      { maxTurns: 1, routing: true, resume: false }
+    );
 
     let agentName = "";
     for await (const event of result) {
-      if (isFinalResponse(event)) {
-        agentName = eventText(event);
+      if (event.final && event.text) {
+        agentName = event.text;
       }
     }
 
@@ -1145,6 +1317,7 @@ async function handleControl(
 async function main(): Promise<void> {
   console.log(`[agent] starting for agent ${AGENT_ID}`);
   console.log(`[agent] NATS URL: ${NATS_URL}`);
+  console.log(`[agent] backend resolved: ${AGENT_BACKEND} (configured=${process.env.AGENT_BACKEND || "auto"})`);
 
   installGlobalInstructions();
   ensureAgentMd();

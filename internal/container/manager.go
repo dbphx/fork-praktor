@@ -145,9 +145,10 @@ func (m *Manager) StartAgent(ctx context.Context, opts AgentOpts) (*ContainerInf
 	if m.cfg.OAuthToken != "" {
 		env = append(env, fmt.Sprintf("CLAUDE_CODE_OAUTH_TOKEN=%s", m.cfg.OAuthToken))
 	}
-	for _, key := range []string{
-		"ADK_MODEL",
-		"VLLM_MODEL",
+		for _, key := range []string{
+			"AGENT_BACKEND",
+			"ADK_MODEL",
+			"VLLM_MODEL",
 		"VLLM_BASE_URL",
 		"VLLM_API_KEY",
 		"OPENAI_BASE_URL",
