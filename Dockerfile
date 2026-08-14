@@ -1,8 +1,10 @@
 # Stage 1: Build the React UI
 FROM node:24-alpine AS ui-builder
 WORKDIR /ui
+COPY ui/package.json ui/package-lock.json ./
+RUN npm ci
 COPY ui/ .
-RUN npm install && npm run build
+RUN npm run build
 
 # Stage 2: Build the Go binary
 FROM golang:1.26.5-alpine AS go-builder
@@ -19,8 +21,9 @@ RUN adduser \
 RUN egrep '^(praktor|root):' /etc/passwd > /etc/passwd.scratch && \
 	egrep '^(praktor|root):' /etc/group > /etc/group.scratch
 WORKDIR /src
-COPY . .
+COPY go.mod go.sum ./
 RUN go mod download
+COPY . .
 COPY --from=ui-builder /ui/dist/ ./internal/web/static/
 ARG VERSION
 RUN CGO_ENABLED=0 go build -ldflags "-X main.version=${VERSION:-$(git describe --tags --always 2>/dev/null || echo dev)}" -o /praktor ./cmd/praktor
