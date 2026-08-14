@@ -46,7 +46,9 @@ cp config/praktor.example.yaml config/praktor.yaml
 cp .env.example .env && chmod 0600 .env
 ```
 
-Edit `.env` and fill in your credentials (see comments in the file for details). Set `DOCKER_GID` to the group ID of the `docker` group on your host so the non-root container user can access the Docker socket:
+Edit `.env` and fill in your credentials (see comments in the file for details). The gateway needs access to `/var/run/docker.sock` so it can create agent containers. The default `PRAKTOR_RUN_USER=0:0` works on a normal Docker host.
+
+If you change `PRAKTOR_RUN_USER` to a non-root user, set `DOCKER_GID` to the group ID of the `docker` group on that host:
 
 ```sh
 grep docker /etc/group    # look for the docker group GID
@@ -114,7 +116,7 @@ cp config/praktor.example.yaml config/praktor.yaml
 cp .env.example .env && chmod 0600 .env
 ```
 
-Fill `.env` with your Telegram token, vault passphrase, web password, and vLLM/ADK credentials. Set `DOCKER_GID` to the group ID that can access `/var/run/docker.sock` on that host.
+Fill `.env` with your Telegram token, vault passphrase, web password, and vLLM/ADK credentials. Keep `PRAKTOR_RUN_USER=0:0` unless you have configured a non-root user that can access `/var/run/docker.sock`.
 
 Build local images:
 

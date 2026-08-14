@@ -13,17 +13,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dbphx/fork-praktor/internal/config"
+	"github.com/dbphx/fork-praktor/internal/natsbus"
 	"github.com/moby/moby/api/pkg/stdcopy"
 	dockercontainer "github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
-	"github.com/dbphx/fork-praktor/internal/config"
-	"github.com/dbphx/fork-praktor/internal/natsbus"
 )
 
 const (
-	labelPrefix = "praktor"
-	networkName = "praktor-net"
+	labelPrefix        = "praktor"
+	defaultNetworkName = "fork-praktor-net"
 )
 
 type Manager struct {
@@ -91,6 +91,11 @@ func (m *Manager) ensureNetwork(ctx context.Context) error {
 		return nil
 	}
 
+	networkName := os.Getenv("PRAKTOR_DOCKER_NETWORK")
+	if networkName == "" {
+		networkName = defaultNetworkName
+	}
+
 	_, err := m.docker.NetworkInspect(ctx, networkName, client.NetworkInspectOptions{})
 	if err == nil {
 		m.networkName = networkName
@@ -145,10 +150,10 @@ func (m *Manager) StartAgent(ctx context.Context, opts AgentOpts) (*ContainerInf
 	if m.cfg.OAuthToken != "" {
 		env = append(env, fmt.Sprintf("CLAUDE_CODE_OAUTH_TOKEN=%s", m.cfg.OAuthToken))
 	}
-		for _, key := range []string{
-			"AGENT_BACKEND",
-			"ADK_MODEL",
-			"VLLM_MODEL",
+	for _, key := range []string{
+		"AGENT_BACKEND",
+		"ADK_MODEL",
+		"VLLM_MODEL",
 		"VLLM_BASE_URL",
 		"VLLM_API_KEY",
 		"OPENAI_BASE_URL",

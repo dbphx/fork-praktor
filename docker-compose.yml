@@ -9,6 +9,7 @@ services:
         GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
     ports:
       - "8081:8080"
+    user: "${PRAKTOR_RUN_USER:-0:0}"
     group_add:
       - "${DOCKER_GID:-131}"
     volumes:
@@ -30,6 +31,7 @@ services:
       - GOOGLE_GENAI_USE_VERTEXAI=${GOOGLE_GENAI_USE_VERTEXAI}
       - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
       - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION}
+      - PRAKTOR_DOCKER_NETWORK=${PRAKTOR_DOCKER_NETWORK:-fork-praktor-net}
       - PRAKTOR_CONFIG=/etc/praktor/praktor.yaml
       - PRAKTOR_TELEGRAM_TOKEN=${PRAKTOR_TELEGRAM_TOKEN}
       - PRAKTOR_VAULT_PASSPHRASE=${PRAKTOR_VAULT_PASSPHRASE}
