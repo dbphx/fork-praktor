@@ -93,15 +93,15 @@ router:
 ### 2. Build and Run
 
 ```sh
-docker compose --profile build build agent-base
-docker compose --profile build build agent
+docker compose --profile build build fork-agent-base
+docker compose --profile build build fork-agent
 docker compose up -d --build
 docker compose logs -f
 ```
 
 The gateway, agent base, and agent runner images are built from the local source tree.
 
-Mission Control is available at `http://localhost:8080`.
+Mission Control is available at `http://localhost:8081`.
 
 ### Run One Service on Another Machine
 
@@ -119,18 +119,18 @@ Fill `.env` with your Telegram token, vault passphrase, web password, and vLLM/A
 Build local images:
 
 ```sh
-docker compose --profile build build agent-base
-docker compose --profile build build agent
+docker compose --profile build build fork-agent-base
+docker compose --profile build build fork-agent
 ```
 
 Run only the gateway service:
 
 ```sh
-docker compose up -d --build praktor
-docker compose logs -f praktor
+docker compose up -d --build fork-praktor
+docker compose logs -f fork-praktor
 ```
 
-Only `praktor` should stay running as the Compose service. Agent containers such as `praktor-agent-general` are created on demand by the gateway when a chat message arrives, using the local `praktor-agent:latest` image.
+Only `fork-praktor` should stay running as the Compose service. Agent containers such as `praktor-agent-general` are created on demand by the gateway when a chat message arrives, using the local `praktor-agent:latest` image.
 
 ### 3. Start Chatting
 

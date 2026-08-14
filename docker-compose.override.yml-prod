@@ -4,13 +4,13 @@ services:
     image: ghcr.io/dbphx/tsrp
     restart: always
     environment:
-      - BACKEND=http://praktor:8080
+      - BACKEND=http://fork-praktor:8080
       - HOSTNAME=${HOSTNAME}
       - TS_AUTHKEY=${TS_AUTHKEY}
     volumes:
       - ./tsrp-state:/var/lib/tsrp
 
-  praktor:
+  fork-praktor:
     networks:
       - default
     ports: !reset # Remove port mapping for praktor in production
