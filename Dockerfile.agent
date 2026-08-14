@@ -8,7 +8,7 @@ COPY agent-runner/tsconfig.json .
 COPY agent-runner/esbuild.mjs .
 RUN node esbuild.mjs
 
-FROM praktor-agent-base:latest
+FROM agent-base
 RUN /usr/local/bin/getcc -get-version 2.1.215 -save /usr/local/bin/claude && chmod 555 /usr/local/bin/claude
 COPY --from=agent-builder /app/out/ /app/
 USER praktor

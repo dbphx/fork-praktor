@@ -95,7 +95,6 @@ router:
 ### 2. Build and Run
 
 ```sh
-docker compose --profile build build fork-agent-base
 docker compose --profile build build fork-agent
 docker compose up -d --build
 docker compose logs -f
@@ -121,7 +120,6 @@ Fill `.env` with your Telegram token, vault passphrase, web password, and vLLM/A
 Build local images:
 
 ```sh
-docker compose --profile build build fork-agent-base
 docker compose --profile build build fork-agent
 ```
 
