@@ -157,6 +157,7 @@ func (m *Manager) StartAgent(ctx context.Context, opts AgentOpts) (*ContainerInf
 		"VLLM_BASE_URL",
 		"VLLM_API_KEY",
 		"OPENAI_BASE_URL",
+		"OPENAI_API_KEY",
 		"GEMINI_API_KEY",
 		"GOOGLE_API_KEY",
 		"GOOGLE_GENAI_USE_VERTEXAI",

@@ -63,6 +63,8 @@ const HAS_ADK_CREDENTIALS = Boolean(
   process.env.VLLM_BASE_URL ||
   process.env.OPENAI_BASE_URL ||
   process.env.VLLM_API_KEY ||
+  process.env.OPENAI_API_KEY ||
+  process.env.VLLM_MODEL ||
   process.env.ADK_MODEL ||
   process.env.GEMINI_API_KEY ||
   process.env.GOOGLE_API_KEY
