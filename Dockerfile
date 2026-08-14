@@ -8,6 +8,8 @@ RUN npm run build
 
 # Stage 2: Build the Go binary
 FROM golang:1.26.5-alpine AS go-builder
+ARG GOPROXY=https://proxy.golang.org,direct
+ENV GOPROXY=${GOPROXY}
 RUN apk add --no-cache busybox-static ca-certificates tzdata && \
    update-ca-certificates
 RUN adduser \
@@ -22,7 +24,12 @@ RUN egrep '^(praktor|root):' /etc/passwd > /etc/passwd.scratch && \
 	egrep '^(praktor|root):' /etc/group > /etc/group.scratch
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN go mod download
+RUN for i in 1 2 3 4 5; do \
+      GODEBUG=http2client=0 go mod download && exit 0; \
+      echo "go mod download failed, retrying in $((i * 10))s ($i/5)"; \
+      sleep $((i * 10)); \
+    done; \
+    GODEBUG=http2client=0 go mod download
 COPY . .
 COPY --from=ui-builder /ui/dist/ ./internal/web/static/
 ARG VERSION

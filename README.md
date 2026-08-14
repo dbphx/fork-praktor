@@ -132,6 +132,16 @@ docker compose logs -f fork-praktor
 
 Only `fork-praktor` should stay running as the Compose service. Agent containers such as `praktor-agent-general` are created on demand by the gateway when a chat message arrives, using the local `praktor-agent:latest` image.
 
+If `go mod download` fails during Docker build because `proxy.golang.org` resets long downloads, set an alternate module proxy in `.env` and rebuild:
+
+```env
+GOPROXY=https://goproxy.io,direct
+```
+
+```sh
+docker compose build fork-praktor
+```
+
 ### 3. Start Chatting
 
 Open Telegram and send a message to your bot. Praktor routes it to the right agent, spins up a container, and responds. Use `@agent_name` to target a specific agent, or let smart routing classify the message automatically:
