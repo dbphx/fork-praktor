@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="ui/public/favicon.svg" width="80" alt="Praktor logo" />
-</p>
-
 # Praktor
 
 Personal AI agent assistant. A single Go binary that receives messages from Telegram, routes them to named ADK/VLLM-backed agents running in isolated Docker containers, and serves a real-time Mission Control web UI. Self-hosted, single-binary deployment via Docker Compose.
