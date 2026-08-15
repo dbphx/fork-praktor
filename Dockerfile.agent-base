@@ -1,8 +1,16 @@
 # Build Go CLIs (ptask + getcc) and download Claude Code binary
 FROM golang:1.26.5-trixie AS go-build
+ARG GOPROXY=https://proxy.golang.org,direct
+ENV GOPROXY=${GOPROXY}
 WORKDIR /src
+COPY go.mod go.sum ./
+RUN for i in 1 2 3 4 5; do \
+      GODEBUG=http2client=0 go mod download && exit 0; \
+      echo "go mod download failed, retrying in $((i * 10))s ($i/5)"; \
+      sleep $((i * 10)); \
+    done; \
+    GODEBUG=http2client=0 go mod download
 COPY . .
-RUN go mod download
 RUN CGO_ENABLED=0 go build -o /ptask ./cmd/ptask
 RUN CGO_ENABLED=0 go build -o /getcc ./cmd/getcc
 

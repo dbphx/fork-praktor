@@ -48,6 +48,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.agent-base
+      args:
+        GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
     profiles:
       - build
 
