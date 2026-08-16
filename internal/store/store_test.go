@@ -80,6 +80,43 @@ func TestAgentCRUD(t *testing.T) {
 	}
 }
 
+func TestDeleteAgentsNotInRemovesDependentRows(t *testing.T) {
+	s := newTestStore(t)
+
+	for _, id := range []string{"general", "coder"} {
+		if err := s.SaveAgent(&Agent{ID: id, Name: id, Workspace: id}); err != nil {
+			t.Fatalf("save agent %s: %v", id, err)
+		}
+	}
+	if err := s.SaveMessage(&Message{AgentID: "general", Sender: "user:1", Content: "old message"}); err != nil {
+		t.Fatalf("save message: %v", err)
+	}
+	if _, err := s.db.Exec(`INSERT INTO scheduled_tasks (id, agent_id, name, schedule, prompt) VALUES ('task-1', 'general', 'old task', '@hourly', 'run')`); err != nil {
+		t.Fatalf("insert task: %v", err)
+	}
+	if _, err := s.db.Exec(`INSERT INTO agent_sessions (id, agent_id) VALUES ('session-1', 'general')`); err != nil {
+		t.Fatalf("insert session: %v", err)
+	}
+	if _, err := s.db.Exec(`INSERT INTO swarm_runs (id, agent_id, task, agents) VALUES ('swarm-1', 'general', 'run', '[]')`); err != nil {
+		t.Fatalf("insert swarm: %v", err)
+	}
+
+	if err := s.DeleteAgentsNotIn([]string{"coder"}); err != nil {
+		t.Fatalf("delete stale agents with dependents: %v", err)
+	}
+
+	if got, err := s.GetAgent("general"); err != nil {
+		t.Fatalf("get deleted agent: %v", err)
+	} else if got != nil {
+		t.Fatal("expected stale agent to be deleted")
+	}
+	if got, err := s.GetAgent("coder"); err != nil {
+		t.Fatalf("get kept agent: %v", err)
+	} else if got == nil {
+		t.Fatal("expected kept agent to remain")
+	}
+}
+
 func TestMessageCRUD(t *testing.T) {
 	s := newTestStore(t)
 

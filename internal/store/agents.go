@@ -79,25 +79,85 @@ func (s *Store) ListAgents() ([]Agent, error) {
 }
 
 func (s *Store) DeleteAgent(id string) error {
-	_, err := s.db.Exec(`DELETE FROM agents WHERE id = ?`, id)
-	return err
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	if err := deleteAgentDependents(tx, `agent_id = ?`, id); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM agents WHERE id = ?`, id); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) DeleteAgentsNotIn(ids []string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
 	if len(ids) == 0 {
-		_, err := s.db.Exec(`DELETE FROM agents`)
+		if err := deleteAgentDependents(tx, `1=1`); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM agents`); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+		return tx.Commit()
+	}
+	where := `agent_id NOT IN (`
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		if i > 0 {
+			where += ","
+		}
+		where += "?"
+		args[i] = id
+	}
+	where += ")"
+	if err := deleteAgentDependents(tx, where, args...); err != nil {
+		_ = tx.Rollback()
 		return err
 	}
 	query := `DELETE FROM agents WHERE id NOT IN (`
-	args := make([]any, len(ids))
-	for i, id := range ids {
+	for i := range ids {
 		if i > 0 {
 			query += ","
 		}
 		query += "?"
-		args[i] = id
 	}
 	query += ")"
-	_, err := s.db.Exec(query, args...)
-	return err
+	if _, err := tx.Exec(query, args...); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+type execer interface {
+	Exec(query string, args ...any) (sql.Result, error)
+}
+
+func deleteAgentDependents(db execer, where string, args ...any) error {
+	for _, table := range []string{
+		"messages",
+		"scheduled_tasks",
+		"agent_sessions",
+		"swarm_runs",
+		"agent_secrets",
+		"agent_mcp_servers",
+		"agent_marketplaces",
+		"agent_plugins",
+		"agent_skills",
+	} {
+		if _, err := db.Exec(`DELETE FROM `+table+` WHERE `+where, args...); err != nil {
+			return fmt.Errorf("delete %s dependents: %w", table, err)
+		}
+	}
+	return nil
 }
