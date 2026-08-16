@@ -6,9 +6,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -127,6 +129,12 @@ func (m *Manager) StartAgent(ctx context.Context, opts AgentOpts) (*ContainerInf
 	}
 
 	if err := m.ensureNetwork(ctx); err != nil {
+		return nil, err
+	}
+	if err := m.seedGlobalWorkspace(ctx, opts); err != nil {
+		return nil, err
+	}
+	if err := m.seedWorkspace(ctx, opts); err != nil {
 		return nil, err
 	}
 
@@ -671,4 +679,142 @@ func (m *Manager) WriteVolumeBytes(ctx context.Context, workspace, filePath stri
 		return fmt.Errorf("copy to volume: %w", err)
 	}
 	return nil
+}
+
+func (m *Manager) seedWorkspace(ctx context.Context, opts AgentOpts) error {
+	workspace := opts.Workspace
+	if workspace == "" {
+		workspace = opts.AgentID
+	}
+	seedDir := filepath.Join(config.AgentsBasePath, workspace)
+	volName := fmt.Sprintf("praktor-wk-%s", sanitizeVolumeName(workspace))
+	return m.seedDirectoryToVolume(ctx, seedDir, volName, workspace, opts)
+}
+
+func (m *Manager) seedGlobalWorkspace(ctx context.Context, opts AgentOpts) error {
+	return m.seedDirectoryToVolume(ctx, filepath.Join(config.AgentsBasePath, "global"), "praktor-global", "global", opts)
+}
+
+func (m *Manager) seedDirectoryToVolume(ctx context.Context, seedDir, volName, label string, opts AgentOpts) error {
+	info, err := os.Stat(seedDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("stat seed dir %s: %w", seedDir, err)
+	}
+	if !info.IsDir() {
+		return nil
+	}
+
+	image := opts.Image
+	if image == "" {
+		image = m.cfg.Image
+	}
+	containerName := fmt.Sprintf("praktor-seed-%s-%d", sanitizeVolumeName(label), time.Now().UnixNano())
+	resp, err := m.docker.ContainerCreate(ctx, client.ContainerCreateOptions{
+		Config:     &dockercontainer.Config{Image: image, Entrypoint: []string{"true"}},
+		HostConfig: &dockercontainer.HostConfig{Binds: []string{volName + ":/vol"}},
+		Name:       containerName,
+	})
+	if err != nil {
+		return fmt.Errorf("create seed container: %w", err)
+	}
+	defer func() {
+		_, _ = m.docker.ContainerRemove(ctx, resp.ID, client.ContainerRemoveOptions{Force: true})
+	}()
+
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	added := 0
+	writtenDirs := map[string]bool{}
+	err = filepath.WalkDir(seedDir, func(src string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+		rel, err := filepath.Rel(seedDir, src)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if m.volumePathExists(ctx, resp.ID, rel) {
+			return nil
+		}
+		dir := path.Dir(rel)
+		if dir != "." && !writtenDirs[dir] {
+			parts := strings.Split(dir, "/")
+			for i := range parts {
+				name := strings.Join(parts[:i+1], "/") + "/"
+				if writtenDirs[name] {
+					continue
+				}
+				if err := tw.WriteHeader(&tar.Header{
+					Typeflag: tar.TypeDir,
+					Name:     name,
+					Mode:     0o755,
+					Uid:      10321,
+					Gid:      10321,
+				}); err != nil {
+					return err
+				}
+				writtenDirs[name] = true
+			}
+		}
+		data, err := os.ReadFile(src)
+		if err != nil {
+			return err
+		}
+		if err := tw.WriteHeader(&tar.Header{
+			Name: rel,
+			Mode: int64(info.Mode().Perm()),
+			Size: int64(len(data)),
+			Uid:  10321,
+			Gid:  10321,
+		}); err != nil {
+			return err
+		}
+		if _, err := tw.Write(data); err != nil {
+			return err
+		}
+		added++
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("walk seed dir %s: %w", seedDir, err)
+	}
+	if err := tw.Close(); err != nil {
+		return fmt.Errorf("close seed tar: %w", err)
+	}
+	if added == 0 {
+		return nil
+	}
+	if _, err := m.docker.CopyToContainer(ctx, resp.ID, client.CopyToContainerOptions{
+		DestinationPath: "/vol",
+		Content:         &buf,
+	}); err != nil {
+		return fmt.Errorf("copy seed dir: %w", err)
+	}
+	slog.Info("seeded docker volume", "volume", volName, "label", label, "files", added)
+	return nil
+}
+
+func (m *Manager) volumePathExists(ctx context.Context, containerID, relPath string) bool {
+	copyResp, err := m.docker.CopyFromContainer(ctx, containerID, client.CopyFromContainerOptions{
+		SourcePath: path.Join("/vol", relPath),
+	})
+	if err != nil {
+		return false
+	}
+	_ = copyResp.Content.Close()
+	return true
 }

@@ -1,79 +1,68 @@
 telegram:
   token: "${PRAKTOR_TELEGRAM_TOKEN}"
-  allow_from: []                    # Empty = allow all; list of Telegram user IDs
-  main_chat_id: 0                   # Chat ID for scheduled task results
+  allow_from: []
+  main_chat_id: 0
 
 defaults:
   image: "praktor-agent:latest"
-  model: "vllm/gemma4-12b"             # Default ADK/vLLM model for agents
+  model: "vllm/gemma4-12b"
   max_running: 5
   idle_timeout: 10m
-
-  # Docker hardening applied to agent containers (reloadable; per-agent
-  # override via `security:` under an agent). Values below are the built-in
-  # "Balanced" defaults — omit the whole block to use them.
+  anthropic_api_key: "${ANTHROPIC_API_KEY}"
+  oauth_token: "${CLAUDE_CODE_OAUTH_TOKEN}"
   security:
-    no_new_privileges: true              # block privilege escalation (setuid)
-    drop_capabilities: true              # cap-drop ALL, then add back the list
+    no_new_privileges: true
+    drop_capabilities: true
     add_capabilities: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID]
-    pids_limit: 1024                     # 0 = unlimited
-    memory_mb: 0                         # per-container memory cap; 0 = unlimited
-    cpus: 0                              # per-container CPU cap; 0 = unlimited
-    tmpfs: true                          # mount nosuid /tmp + noexec,nosuid /var/tmp
-    readonly_rootfs: false               # writable only via volumes + tmpfs
-    # Caveats for this stack:
-    #  - Chromium: no impact. agent-browser always launches Chromium with
-    #    --no-sandbox (Docker's default seccomp blocks the unshare(CLONE_NEWUSER)
-    #    the in-process sandboxes need), so no_new_privileges changes nothing.
-    #    The unused setuid chrome-sandbox helper is not even installed. Host
-    #    unprivileged-userns support is irrelevant — the limit is the
-    #    container's seccomp/caps, not the host.
-    #  - nix: no impact. The agent image sets max-jobs = 0, so nix only
-    #    installs prebuilt packages from the binary cache and never builds
-    #    locally — it never needs the build sandbox (CAP_SYS_ADMIN). If you
-    #    ever change that to allow source builds, add SYS_ADMIN back here.
+    pids_limit: 1024
+    memory_mb: 0
+    cpus: 0
+    tmpfs: true
+    readonly_rootfs: false
 
 agents:
-  general:
-    description: "General-purpose assistant for everyday tasks"
-    workspace: general
-    # agentmail_inbox_id: "general@agentmail.to"  # AgentMail inbox (optional)
-  coder:
-    description: "Software engineering specialist"
+  log_analyzer:
+    description: "Log queries and log analysis. Pick this agent whenever log DATA is needed or interpreted: searching logs by time range, status code, endpoint/path, IP, trace id / request id / user id; counting errors; pulling sample lines; spotting abnormal patterns; correlating events across sources; checking whether a request ever reached the server. Also handles root-cause analysis of infrastructure failures once the log data is in hand."
     model: "vllm/gemma4-12b"
-    workspace: coder
-    nix_enabled: true                              # Enable nix package manager
     env:
-      EDITOR: vim                            # Regular env var
-      GITHUB_TOKEN: "secret:github-token"    # Resolved from vault at container start
+      LOG_API_URL: "${LOG_API_URL}"
     files:
-      - secret: gcp-service-account          # Secret name in vault
-        target: /etc/gcp/sa.json             # Path inside container
-        mode: "0600"                         # File permissions (default: 0600)
-  researcher:
-    description: "Web research and analysis"
-    workspace: researcher
-    allowed_tools: [WebSearch, WebFetch, Read, Write]
+      - secret: log-api-key
+        target: /workspace/.log_api_key
+        mode: "0600"
+    workspace: log_analyzer
+  reporter:
+    description: "Writing security reports. Pick this agent when the user asks for a report, a write-up, an incident summary, a post-mortem, or a formatted document assembled from findings that already exist. Does not investigate on its own; it turns material it is given into a structured document."
+    model: "vllm/gemma4-12b"
+    workspace: reporter
+  threat_intel:
+    description: "Threat intelligence research. Pick this agent for questions about an indicator of compromise or a vulnerability: is this IP / domain / file hash / CVE ID a known threat, how severe is it, is a public exploit available, is it exploited in the wild, what do NVD / vendor advisories / abuse databases say. Works from public sources on the web. Does NOT query internal logs."
+    model: "vllm/gemma4-12b"
+    workspace: threat_intel
+  triage:
+    description: "Security triage and general answers. Handles: classifying a signal as benign / suspicious / malicious / critical, assigning severity, filtering noise, greetings, questions about this Praktor system, summarising results that already exist, and clarifying vague requests. Does NOT query the log API, does NOT research threat intel, does NOT write reports."
+    model: "vllm/gemma4-12b"
+    workspace: triage
 
 router:
-  default_agent: general
+  default_agent: triage
 
 web:
   enabled: true
   port: 8080
-  auth: "${PRAKTOR_WEB_PASSWORD}"    # Basic auth for dashboard
+  auth: "${PRAKTOR_WEB_PASSWORD}"
 
 vault:
   passphrase: "${PRAKTOR_VAULT_PASSPHRASE}"
 
 agentmail:
-  api_key: "${AGENTMAIL_API_KEY}"    # AgentMail API key (optional)
+  api_key: "${AGENTMAIL_API_KEY}"
 
 speech:
-  api_key: "${OPENAI_API_KEY}"          # OpenAI API key for STT/TTS (optional, disabled if empty)
-  tts_enabled: false                    # Enable text-to-speech voice responses
-  tts_mode: "voice"                     # "voice" = respond with voice only when user sends voice, "always" = all responses, "never" = disabled
-  tts_voice: "alloy"                    # OpenAI TTS voice (alloy, echo, fable, onyx, nova, shimmer)
+  api_key: "${OPENAI_API_KEY}"
+  tts_enabled: false
+  tts_mode: "voice"
+  tts_voice: "alloy"
 
 scheduler:
   poll_interval: 30s

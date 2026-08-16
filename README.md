@@ -104,6 +104,8 @@ The gateway, agent base, and agent runner images are built from the local source
 
 Mission Control is available at `http://localhost:8081`.
 
+Agent harness files live in `agents/`. Each workspace can include `AGENT.md`, `CLAUDE.md`, notes, scripts, or other starter files. On agent start, Praktor seeds files that are missing from the corresponding Docker workspace volume without overwriting files the agent has already created.
+
 ### Run One Service on Another Machine
 
 On a fresh machine, clone the repo, create `.env` and `config/praktor.yaml`, then build the two agent images once before starting the gateway:

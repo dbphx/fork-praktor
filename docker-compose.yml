@@ -16,7 +16,7 @@ services:
       - ./config:/etc/praktor:ro
       - /var/run/docker.sock:/var/run/docker.sock
       - fork-praktor-data:/data
-      - fork-praktor-global:/data/agents/global
+      - ./agents:/data/agents
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN}
@@ -70,8 +70,6 @@ services:
 volumes:
   fork-praktor-data:
     name: fork-praktor-data
-  fork-praktor-global:
-    name: fork-praktor-global
 
 networks:
   fork-praktor-net:
