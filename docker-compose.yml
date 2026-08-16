@@ -38,6 +38,7 @@ services:
       - PRAKTOR_WEB_PASSWORD=${PRAKTOR_WEB_PASSWORD}
       - AGENTMAIL_API_KEY=${AGENTMAIL_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LOG_API_URL=${LOG_API_URL}
       - TZ=${TZ:-UTC}
     networks:
       - fork-praktor-net
