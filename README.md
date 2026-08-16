@@ -100,7 +100,7 @@ docker compose up -d --build
 docker compose logs -f
 ```
 
-The gateway, agent base, and agent runner images are built from the local source tree.
+The gateway, agent base, and agent runner images are built from the local source tree. The agent image skips the Claude Code binary by default because ADK/vLLM does not need it; set `INSTALL_CLAUDE_CODE=true` in `.env` only when you want Claude SDK fallback.
 
 Mission Control is available at `http://localhost:8081`.
 
@@ -122,6 +122,8 @@ Build local images:
 ```sh
 docker compose --profile build build fork-agent
 ```
+
+For ADK/vLLM deployments, keep `INSTALL_CLAUDE_CODE=false` so the build does not wait on the Claude Code binary download.
 
 Run only the gateway service:
 

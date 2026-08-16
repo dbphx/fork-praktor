@@ -60,6 +60,8 @@ services:
       dockerfile: Dockerfile.agent
       additional_contexts:
         agent-base: service:fork-agent-base
+      args:
+        INSTALL_CLAUDE_CODE: ${INSTALL_CLAUDE_CODE:-false}
     depends_on:
       - fork-agent-base
     profiles:

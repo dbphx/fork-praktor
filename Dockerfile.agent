@@ -9,7 +9,21 @@ COPY agent-runner/esbuild.mjs .
 RUN node esbuild.mjs
 
 FROM agent-base
-RUN /usr/local/bin/getcc -get-version 2.1.215 -save /usr/local/bin/claude && chmod 555 /usr/local/bin/claude
+ARG INSTALL_CLAUDE_CODE=false
+RUN if [ "$INSTALL_CLAUDE_CODE" = "true" ]; then \
+      for i in 1 2 3; do \
+        /usr/local/bin/getcc -get-version 2.1.215 -save /usr/local/bin/claude && chmod 555 /usr/local/bin/claude && exit 0; \
+        echo "getcc failed, retrying in $((i * 10))s ($i/3)"; \
+        sleep $((i * 10)); \
+      done; \
+      /usr/local/bin/getcc -get-version 2.1.215 -save /usr/local/bin/claude && chmod 555 /usr/local/bin/claude; \
+    else \
+      printf '%s\n' \
+        '#!/bin/sh' \
+        'echo "Claude Code binary is not installed. Rebuild with INSTALL_CLAUDE_CODE=true or use AGENT_BACKEND=adk." >&2' \
+        'exit 1' \
+        > /usr/local/bin/claude && chmod 555 /usr/local/bin/claude; \
+    fi
 COPY --from=agent-builder /app/out/ /app/
 USER praktor
 WORKDIR /workspace/agent
