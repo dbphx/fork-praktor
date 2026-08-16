@@ -714,6 +714,17 @@ function buildMcpServers(): Record<string, MCPServerConfig> {
     },
     ...extensionMcpServers,
   };
+  if (process.env.LOG_API_URL) {
+    mcpServers["praktor-log-api"] = {
+      type: "stdio",
+      command: "node",
+      args: ["/app/mcp-log-api.mjs"],
+      env: {
+        LOG_API_URL: process.env.LOG_API_URL,
+        LOG_API_TOKEN_FILE: process.env.LOG_API_TOKEN_FILE || "/workspace/.log_api_key",
+      },
+    };
+  }
   if (SWARM_CHAT_TOPIC) {
     mcpServers["praktor-swarm"] = {
       type: "stdio",

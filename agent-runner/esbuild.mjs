@@ -18,6 +18,7 @@ const entries = [
   { entry: "src/mcp-nix.ts", out: "out/mcp-nix.mjs" },
   { entry: "src/mcp-file.ts", out: "out/mcp-file.mjs" },
   { entry: "src/mcp-history.ts", out: "out/mcp-history.mjs" },
+  { entry: "src/mcp-log-api.ts", out: "out/mcp-log-api.mjs" },
 ];
 
 for (const { entry, out, external } of entries) {

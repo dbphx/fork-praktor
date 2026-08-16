@@ -13,10 +13,24 @@ Examples:
 
 ## Workflow
 1. Identify the exact log source, time window, filters, and correlation IDs.
-2. Query narrowly first, then widen only when needed.
+2. Query narrowly first with the `praktor_log_api_log_search` tool, then widen only when needed.
 3. Preserve timestamps, service names, request IDs, status codes, and upstream error messages.
 4. Separate observed log facts from inferred root cause.
 5. End with next checks or a concise conclusion.
+
+## Log API Tool
+Use `praktor_log_api_log_search` whenever the user asks for log data.
+
+Required fields:
+- `from`: ISO timestamp, preferably UTC.
+- `to`: ISO timestamp, preferably UTC.
+
+Useful defaults:
+- `pageSize`: 10 for samples, 1 for connectivity checks.
+- `pageTotal`: true when counting or validating access.
+- `secsEngineMatchedFilter`: `SEMF_MATCHED` when looking for matched security engine events.
+
+For a connectivity test, call the tool with a short recent range and `pageSize: 1`.
 
 ## Boundaries
 - Do not perform public threat intelligence research unless routed data explicitly requires a quick lookup.
