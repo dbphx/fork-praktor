@@ -119,6 +119,13 @@ cp .env.example .env && chmod 0600 .env
 
 Fill `.env` with your Telegram token, vault passphrase, web password, and vLLM/ADK credentials. Keep `PRAKTOR_RUN_USER=0:0` unless you have configured a non-root user that can access `/var/run/docker.sock`.
 
+For `log_analyzer`, keep `LOG_API_URL` in `.env` and store the bearer token in the encrypted vault after the gateway starts:
+
+```sh
+docker compose exec fork-praktor /praktor vault set log-api-key --value "<KEY>" --description "Log API Bearer token"
+docker compose exec fork-praktor /praktor vault assign log-api-key --agent log_analyzer
+```
+
 Build local images:
 
 ```sh
