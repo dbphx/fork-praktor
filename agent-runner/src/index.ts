@@ -757,14 +757,14 @@ function buildMcpServers(): Record<string, MCPServerConfig> {
       },
     };
   }
-  if (process.env.REPORT_BANDWIDTH_API_URL || process.env.REPORT_REQUEST_API_URL) {
+  if (AGENT_ID === "reporter" || process.env.REPORT_BANDWIDTH_API_URL || process.env.REPORT_REQUEST_API_URL) {
     mcpServers["praktor-report-api"] = {
       type: "stdio",
       command: "node",
       args: ["/app/mcp-report-api.mjs"],
       env: {
-        REPORT_BANDWIDTH_API_URL: process.env.REPORT_BANDWIDTH_API_URL || "",
-        REPORT_REQUEST_API_URL: process.env.REPORT_REQUEST_API_URL || "",
+        REPORT_BANDWIDTH_API_URL: process.env.REPORT_BANDWIDTH_API_URL || "https://bo.insky.io.vn/analytic/report/bandwidth",
+        REPORT_REQUEST_API_URL: process.env.REPORT_REQUEST_API_URL || "https://bo.insky.io.vn/analytic/report/request",
         REPORT_API_TOKEN_FILE: process.env.REPORT_API_TOKEN_FILE || process.env.LOG_API_TOKEN_FILE || "/workspace/.log_api_key",
       },
     };

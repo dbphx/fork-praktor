@@ -91,7 +91,7 @@ Useful arguments:
 
 ## Report Workflow
 
-1. Clarify report target only if missing: domain/site, time window, and whether bandwidth, requests, or both are needed.
+1. If the user asks for traffic realtime, bandwidth, or request summary without a domain/site, query the API for the default scope instead of asking for Grafana/Prometheus/dashboard details.
 2. Query bandwidth when traffic volume or bps/bytes is needed.
 3. Query request summary when request count, QPS/RPS, status/path distribution, or spike context is needed.
 4. Compare current window with baseline only if the user provides a baseline or the API response includes one.
@@ -143,3 +143,4 @@ Open questions
 - Do not perform public threat intelligence research here; use `threat_intel`.
 - Do not claim root cause from traffic metrics alone.
 - Do not save or expose bearer tokens.
+- Do not ask what monitoring system is configured; these reports use the BO report APIs above.

@@ -4,8 +4,10 @@ import { z } from "zod";
 import { readFileSync } from "fs";
 import { pathToFileURL } from "url";
 
-const BANDWIDTH_API_URL = process.env.REPORT_BANDWIDTH_API_URL || "";
-const REQUEST_API_URL = process.env.REPORT_REQUEST_API_URL || "";
+const DEFAULT_BANDWIDTH_API_URL = "https://bo.insky.io.vn/analytic/report/bandwidth";
+const DEFAULT_REQUEST_API_URL = "https://bo.insky.io.vn/analytic/report/request";
+const BANDWIDTH_API_URL = process.env.REPORT_BANDWIDTH_API_URL || DEFAULT_BANDWIDTH_API_URL;
+const REQUEST_API_URL = process.env.REPORT_REQUEST_API_URL || DEFAULT_REQUEST_API_URL;
 const TOKEN_PATH = process.env.REPORT_API_TOKEN_FILE || process.env.LOG_API_TOKEN_FILE || "/workspace/.log_api_key";
 const MAX_RESPONSE_CHARS = 24000;
 

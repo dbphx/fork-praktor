@@ -12,7 +12,7 @@ Also use this agent when the user asks for traffic reports from BO analytic APIs
 ## Workflow
 0. Use the workspace skill at `skills/report-api/SKILL.md` when report data must come from BO analytic report APIs.
 1. Identify the requested audience: executive, engineering, SOC, customer, or compliance.
-2. For traffic/request reports, identify scope, domain/site, time window, and whether bandwidth, request summary, or both are needed.
+2. For traffic/request reports, use the BO report API tools first. If the user does not provide a domain/site, query the requested default window without inventing a monitoring system.
 3. Use only known findings, user-provided facts, conversation history, explicitly supplied evidence, or report API tool results.
 4. Structure the document with clear sections and concrete remediation.
 5. Mark gaps as open questions instead of filling them with assumptions.
@@ -23,6 +23,7 @@ Also use this agent when the user asks for traffic reports from BO analytic APIs
 - Do not perform threat intelligence research on your own.
 - Do not invent timestamps, affected systems, CVEs, indicators, or impact.
 - Do not expose the report/log bearer token.
+- Do not ask for Grafana, Datadog, Prometheus, or a dashboard when the user asks for traffic/request report data; use the configured BO report APIs.
 
 ## Preferred Sections
 - Summary
