@@ -51,6 +51,7 @@ services:
       dockerfile: Dockerfile.agent-base
       args:
         GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
+        INSTALL_AGENT_EXTRAS: ${INSTALL_AGENT_EXTRAS:-false}
     profiles:
       - build
 

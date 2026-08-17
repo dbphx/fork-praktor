@@ -74,20 +74,33 @@ RUN useradd \
 # Copy built artifacts from builder stages
 COPY --from=go-build /ptask /usr/local/bin/ptask
 COPY --from=go-build /getcc /usr/local/bin/getcc
-RUN NPM_GLOBAL=$(npm root -g) && \
-    npm install --loglevel=error -g agentmail-cli@0.7.12 @huggingface/transformers@3 && \
-    rm -rf -- /root/.npm /tmp/node-compile-cache && \
-    cd "$NPM_GLOBAL/@huggingface/transformers/node_modules" && \
-    rm -rf onnxruntime-node && mkdir -p onnxruntime-node && \
-    echo '{"name":"onnxruntime-node","main":"index.js"}' > onnxruntime-node/package.json && \
-    printf '%s\n' \
-      'const ort=require("onnxruntime-web");' \
-      'const path=require("path");' \
-      'const wasmDir=path.join(__dirname,"..","onnxruntime-web","dist");' \
-      'ort.env.wasm.wasmPaths="file://"+wasmDir+"/";' \
-      'ort.env.wasm.numThreads=1;' \
-      'module.exports=ort;' \
-      > onnxruntime-node/index.js
+ARG INSTALL_AGENT_EXTRAS=false
+RUN if [ "$INSTALL_AGENT_EXTRAS" = "true" ]; then \
+      npm config set fetch-retries 5 && \
+      npm config set fetch-retry-factor 2 && \
+      npm config set fetch-retry-mintimeout 20000 && \
+      npm config set fetch-retry-maxtimeout 120000 && \
+      NPM_GLOBAL=$(npm root -g) && \
+      for i in 1 2 3 4 5; do \
+        npm install --loglevel=error -g agentmail-cli@0.7.12 @huggingface/transformers@3 && break; \
+        echo "npm install agent extras failed, retrying in $((i * 15))s ($i/5)"; \
+        sleep $((i * 15)); \
+      done && \
+      rm -rf -- /root/.npm /tmp/node-compile-cache && \
+      cd "$NPM_GLOBAL/@huggingface/transformers/node_modules" && \
+      rm -rf onnxruntime-node && mkdir -p onnxruntime-node && \
+      echo '{"name":"onnxruntime-node","main":"index.js"}' > onnxruntime-node/package.json && \
+      printf '%s\n' \
+        'const ort=require("onnxruntime-web");' \
+        'const path=require("path");' \
+        'const wasmDir=path.join(__dirname,"..","onnxruntime-web","dist");' \
+        'ort.env.wasm.wasmPaths="file://"+wasmDir+"/";' \
+        'ort.env.wasm.numThreads=1;' \
+        'module.exports=ort;' \
+        > onnxruntime-node/index.js; \
+    else \
+      echo "Skipping optional agent extras (agentmail-cli and @huggingface/transformers)"; \
+    fi
 
 # Install agent-browser binary from GitHub release
 ARG AGENT_BROWSER_VERSION=v0.32.3
@@ -117,13 +130,22 @@ RUN mkdir -p /usr/local/share/agent-browser && \
 ENV TRANSFORMERS_CACHE=/opt/models
 ENV NODE_PATH=/usr/lib/node_modules
 RUN mkdir -p /opt/models && \
-    node -e "const{pipeline}=require('@huggingface/transformers');pipeline('feature-extraction','Xenova/all-MiniLM-L6-v2',{dtype:'q8',cache_dir:'/opt/models'}).then(()=>console.log('model downloaded'))" && \
+    if [ "$INSTALL_AGENT_EXTRAS" = "true" ]; then \
+      node -e "const{pipeline}=require('@huggingface/transformers');pipeline('feature-extraction','Xenova/all-MiniLM-L6-v2',{dtype:'q8',cache_dir:'/opt/models'}).then(()=>console.log('model downloaded'))"; \
+    else \
+      echo "Skipping optional embedding model download"; \
+    fi && \
     chown -R praktor:praktor /opt/models
 
 # Download agentmail-cli skill for agents with email capabilities
 RUN mkdir -p /opt/agentmail-skill && \
-    curl -so /opt/agentmail-skill/SKILL.md \
-    https://raw.githubusercontent.com/agentmail-to/agentmail-skills/main/agentmail-cli/SKILL.md
+    if [ "$INSTALL_AGENT_EXTRAS" = "true" ]; then \
+      curl -fSL --retry 5 --retry-delay 10 --retry-all-errors \
+        -o /opt/agentmail-skill/SKILL.md \
+        https://raw.githubusercontent.com/agentmail-to/agentmail-skills/main/agentmail-cli/SKILL.md; \
+    else \
+      echo "Skipping optional agentmail skill download"; \
+    fi
 
 # Pre-create volume mount points with correct ownership so Docker
 # populates new named volumes with the right permissions and structure.
