@@ -94,6 +94,7 @@ const SWARM_ROLE = process.env.SWARM_ROLE || "";
 // See `agent-browser mcp --help`.
 const AGENT_BROWSER_INSTALLED = existsSync("/usr/local/bin/agent-browser");
 const AGENT_BROWSER_MCP_TOOLS = (process.env.AGENT_BROWSER_MCP || "core").trim() || "core";
+const AGENT_BROWSER_ENABLED = AGENT_BROWSER_INSTALLED && process.env.AGENT_BROWSER_DISABLED !== "true" && AGENT_ID !== "reporter";
 
 let bridge: NatsBridge;
 let isProcessing = false;
@@ -188,7 +189,7 @@ function setupAgentBrowser(): void {
   // agent-browser is driven via its typed MCP server, so no usage-guide skill
   // is injected — only the config symlink (chromium path) is needed.
   const configSource = "/usr/local/share/agent-browser/config.json";
-  if (!AGENT_BROWSER_INSTALLED) return;
+  if (!AGENT_BROWSER_ENABLED) return;
 
   try {
     const skillsDir = "/home/praktor/.claude/skills";
@@ -410,7 +411,7 @@ function loadSystemPrompt(includeIdentity = true): string {
 
   // agent-browser: inform agent it's pre-installed (system chromium) and
   // exposed through its typed MCP tools.
-  if (AGENT_BROWSER_INSTALLED) {
+  if (AGENT_BROWSER_ENABLED) {
     parts.push(
       "AGENT-BROWSER — Pre-installed, exposed as typed MCP tools. Do NOT install browsers via npm, npx, nix, or any other method.\n" +
       "- Browser automation is available as `mcp__agent-browser__agent_browser_*` tools (configured to use the system Chromium).\n" +
@@ -779,7 +780,7 @@ function buildMcpServers(): Record<string, MCPServerConfig> {
   }
   // agent-browser typed MCP server (v0.28.0+). Tools surface as
   // mcp__agent-browser__*; profile selected by AGENT_BROWSER_MCP (default core).
-  if (AGENT_BROWSER_INSTALLED) {
+  if (AGENT_BROWSER_ENABLED) {
     mcpServers["agent-browser"] = {
       type: "stdio",
       command: "/usr/local/bin/agent-browser",

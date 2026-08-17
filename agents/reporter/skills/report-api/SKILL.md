@@ -39,6 +39,13 @@ Prefer timestamps with `+07:00`, for example:
 
 If the API rejects offset timestamps, retry once with equivalent UTC `Z` timestamps.
 
+If the API returns HTTP 400:
+
+1. Read the tool response `body` and `requestParams`.
+2. Retry once with the opposite method (`GET` -> `POST`, or `POST` -> `GET`).
+3. Retry once with only the minimal window fields `from` and `to`.
+4. If it still fails, report the exact validation/error message from `body` and the non-secret request fields that were sent.
+
 ## Bandwidth Realtime Workflow
 
 Use `praktor_report_api_bandwidth_realtime` for:
@@ -144,3 +151,4 @@ Open questions
 - Do not claim root cause from traffic metrics alone.
 - Do not save or expose bearer tokens.
 - Do not ask what monitoring system is configured; these reports use the BO report APIs above.
+- Do not use browser tools for BO report data. Use only `praktor_report_api_bandwidth_realtime` and `praktor_report_api_request_summary`.

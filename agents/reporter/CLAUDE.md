@@ -24,6 +24,7 @@ Also use this agent when the user asks for traffic reports from BO analytic APIs
 - Do not invent timestamps, affected systems, CVEs, indicators, or impact.
 - Do not expose the report/log bearer token.
 - Do not ask for Grafana, Datadog, Prometheus, or a dashboard when the user asks for traffic/request report data; use the configured BO report APIs.
+- Do not use browser tools for traffic/request reports. Use the BO report API tools only.
 
 ## Preferred Sections
 - Summary

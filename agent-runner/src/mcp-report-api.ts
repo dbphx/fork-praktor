@@ -67,6 +67,7 @@ async function callReportApi(
   const url = new URL(apiURL);
   const init: RequestInit = {
     method: selectedMethod,
+    signal: AbortSignal.timeout(20000),
     headers: {
       authorization: `Bearer ${token}`,
       accept: "application/json",
@@ -106,6 +107,7 @@ async function callReportApi(
             queryTimezone: "UTC+7",
             displayTimezone: "Asia/Ho_Chi_Minh (+07:00)",
             note: "Show user-facing report windows and timestamps in UTC+7 unless the user requested another timezone.",
+            requestParams: params,
             url: selectedMethod === "GET" ? url.toString() : apiURL,
             body: truncate(body),
           },
