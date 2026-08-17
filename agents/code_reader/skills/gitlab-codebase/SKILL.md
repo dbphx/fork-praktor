@@ -1,6 +1,6 @@
 ---
 name: gitlab-codebase
-description: Read, clone, inspect, understand, map, and trace bugs in GitLab-hosted codebases using GITLAB_DOMAIN and GITLAB_TOKEN from the environment. Use when a user asks to inspect a GitLab repo, understand the whole codebase, trace a bug, find files/functions/routes/jobs/config, review code, compare branches, summarize architecture, or answer implementation questions grounded in source.
+description: Read, clone, inspect, understand, map, and trace bugs in GitLab-hosted codebases using GITLAB_DOMAIN and GITLAB_TOKEN from the environment. Use when a user asks to inspect a GitLab repo, read code/source, đọc code, xem source, understand the whole codebase, trace a bug, find files/functions/routes/jobs/config, review code, compare branches, summarize architecture, or answer implementation questions grounded in source.
 ---
 
 # GitLab Codebase Skill
@@ -29,6 +29,14 @@ Accept any of these forms:
 - namespace path plus branch/ref: `group/project@main`
 
 Normalize the repository to an HTTPS clone URL using `GITLAB_DOMAIN`.
+
+If the user gives only a short project hint such as `insky`, do not answer from general knowledge. First search accessible GitLab projects:
+
+```sh
+sh /workspace/agent/skills/gitlab-codebase/scripts/gitlab-search-projects.sh "insky"
+```
+
+If exactly one project is a clear match, use its `path_with_namespace`. If several repositories could match, list the likely options and ask the user to choose. If search fails or returns nothing, ask for the GitLab namespace path (`group/project`).
 
 ## Clone Pattern
 

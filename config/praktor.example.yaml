@@ -22,7 +22,7 @@ defaults:
 
 agents:
   code_reader:
-    description: "GitLab codebase reader. Pick this agent when the user asks to clone, inspect, search, review, or explain source code from a GitLab repository; trace routes/functions/jobs/config; compare branches; or answer implementation questions grounded in code. Uses GitLab domain/token from env. Does NOT query logs or threat intel sources."
+    description: "GitLab codebase reader. Pick this agent when the user asks to read code/source, đọc code, xem source, inspect/search/review/explain a GitLab repository, trace bug from source, trace routes/functions/jobs/config, compare branches, or answer implementation questions grounded in code. Examples: đọc code insky, trace bug repo group/project, tìm API login trong source. Uses GitLab domain/token from env. Does NOT query logs or threat intel sources."
     model: "vllm/gemma4-12b"
     env:
       GITLAB_DOMAIN: "${GITLAB_DOMAIN}"
