@@ -79,6 +79,40 @@ Do not reuse stale dates from previous messages. If the tool result date conflic
    - ask for path/IP/request ID only after the broad check is also empty
 5. For incidents, collect enough samples to include timestamp, action, rule/signature, source IP, path, status code, request ID, and upstream error if present.
 
+## Threat Intel Handoff
+
+When the user or `threat_intel` asks for WAF evidence to classify attack types or false positives for a domain/IP/URL, return a grouped evidence summary instead of only raw samples.
+
+Collect and summarize:
+
+- window in UTC+7
+- total matched events
+- top rule names, rule IDs, categories, severities, and actions
+- top paths, methods, status codes, source IPs/ASNs/countries, and user agents
+- redacted payload patterns around matched parameters
+- repeated sequences such as recon -> exploit, same source across many paths, or many payload variants
+- normal-business-context clues that may indicate false positive
+
+Use this handoff shape:
+
+```text
+Evidence for threat_intel
+• Indicator: ...
+• Window UTC+7: ...
+• Total matched events: ...
+• Clusters:
+  1. category/rule/action/count/top paths/source pattern/payload pattern
+  2. ...
+• Samples:
+  1. timestamp UTC+7/rule/path/source/status/redacted payload
+• FP context:
+  • ...
+• Missing:
+  • ...
+```
+
+Do not decide attribution. If the question is "what attack type is this and false positive?", hand this summary to `threat_intel` after gathering evidence.
+
 ## Response Shape
 
 Keep Telegram output compact:
