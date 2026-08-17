@@ -21,6 +21,14 @@ defaults:
     readonly_rootfs: false
 
 agents:
+  code_reader:
+    description: "GitLab codebase reader. Pick this agent when the user asks to clone, inspect, search, review, or explain source code from a GitLab repository; trace routes/functions/jobs/config; compare branches; or answer implementation questions grounded in code. Uses GitLab domain/token from env. Does NOT query logs or threat intel sources."
+    model: "vllm/gemma4-12b"
+    env:
+      GITLAB_DOMAIN: "${GITLAB_DOMAIN}"
+      GITLAB_TOKEN: "${GITLAB_TOKEN}"
+      GITLAB_USERNAME: "${GITLAB_USERNAME}"
+    workspace: code_reader
   log_analyzer:
     description: "Log queries and log analysis. Pick this agent whenever log DATA is needed or interpreted: searching logs by time range, status code, endpoint/path, IP, trace id / request id / user id; counting errors; pulling sample lines; spotting abnormal patterns; correlating events across sources; checking whether a request ever reached the server. Also handles root-cause analysis of infrastructure failures once the log data is in hand."
     model: "vllm/gemma4-12b"

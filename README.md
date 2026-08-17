@@ -126,6 +126,16 @@ docker compose exec fork-praktor /praktor vault set log-api-key --value "<KEY>" 
 docker compose exec fork-praktor /praktor vault assign log-api-key --agent log_analyzer
 ```
 
+For `code_reader`, put GitLab access in `.env`:
+
+```env
+GITLAB_DOMAIN=gitlab.example.com
+GITLAB_TOKEN=<gitlab-token>
+GITLAB_USERNAME=oauth2
+```
+
+Then ask Telegram with `@code_reader`, for example `@code_reader đọc repo group/project branch main và tìm API login`.
+
 Build local images:
 
 ```sh
