@@ -126,6 +126,12 @@ docker compose exec fork-praktor /praktor vault set log-api-key --value "<KEY>" 
 docker compose exec fork-praktor /praktor vault assign log-api-key --agent log_analyzer
 ```
 
+For `reporter`, keep `REPORT_BANDWIDTH_API_URL` and `REPORT_REQUEST_API_URL` in `.env`. It uses the same vault token, so assign `log-api-key` to `reporter` too:
+
+```sh
+docker compose exec fork-praktor /praktor vault assign log-api-key --agent reporter
+```
+
 For `code_reader`, put GitLab access in `.env`:
 
 ```env

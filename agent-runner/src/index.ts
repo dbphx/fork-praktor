@@ -757,6 +757,18 @@ function buildMcpServers(): Record<string, MCPServerConfig> {
       },
     };
   }
+  if (process.env.REPORT_BANDWIDTH_API_URL || process.env.REPORT_REQUEST_API_URL) {
+    mcpServers["praktor-report-api"] = {
+      type: "stdio",
+      command: "node",
+      args: ["/app/mcp-report-api.mjs"],
+      env: {
+        REPORT_BANDWIDTH_API_URL: process.env.REPORT_BANDWIDTH_API_URL || "",
+        REPORT_REQUEST_API_URL: process.env.REPORT_REQUEST_API_URL || "",
+        REPORT_API_TOKEN_FILE: process.env.REPORT_API_TOKEN_FILE || process.env.LOG_API_TOKEN_FILE || "/workspace/.log_api_key",
+      },
+    };
+  }
   if (SWARM_CHAT_TOPIC) {
     mcpServers["praktor-swarm"] = {
       type: "stdio",

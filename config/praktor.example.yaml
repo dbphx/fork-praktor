@@ -40,8 +40,15 @@ agents:
         mode: "0600"
     workspace: log_analyzer
   reporter:
-    description: "Writing security reports. Pick this agent when the user asks for a report, a write-up, an incident summary, a post-mortem, or a formatted document assembled from findings that already exist. Does not investigate on its own; it turns material it is given into a structured document."
+    description: "Writing security and traffic reports. Pick this agent when the user asks for a report, a write-up, an incident summary, a post-mortem, realtime bandwidth/traffic report, request summary, QPS/RPS, request count, top paths/status/domains, or formatted document assembled from findings and report API metrics. Uses BO analytic report APIs when configured."
     model: "vllm/gemma4-12b"
+    env:
+      REPORT_BANDWIDTH_API_URL: "${REPORT_BANDWIDTH_API_URL}"
+      REPORT_REQUEST_API_URL: "${REPORT_REQUEST_API_URL}"
+    files:
+      - secret: log-api-key
+        target: /workspace/.log_api_key
+        mode: "0600"
     workspace: reporter
   threat_intel:
     description: "Threat intelligence research. Pick this agent for questions about an indicator of compromise or a vulnerability: is this IP / domain / file hash / CVE ID a known threat, how severe is it, is a public exploit available, is it exploited in the wild, what do NVD / vendor advisories / abuse databases say. Works from public sources on the web. Does NOT query internal logs."
