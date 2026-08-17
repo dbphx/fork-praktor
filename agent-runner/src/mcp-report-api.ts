@@ -43,6 +43,15 @@ function parseExtra(extraQueryJson?: string): Record<string, unknown> | string {
   }
 }
 
+function defaultWindow(minutes: number): { from: string; to: string } {
+  const to = new Date();
+  const from = new Date(to.getTime() - minutes * 60 * 1000);
+  return {
+    from: from.toISOString().replace(/\.\d{3}Z$/, "Z"),
+    to: to.toISOString().replace(/\.\d{3}Z$/, "Z"),
+  };
+}
+
 async function callReportApi(
   endpointName: string,
   apiURL: string,
@@ -120,8 +129,8 @@ async function callReportApi(
 }
 
 const commonParams = {
-  from: z.string().optional().describe("Optional start timestamp, RFC3339/ISO-8601. Prefer UTC+7, e.g. 2026-08-17T15:00:00+07:00."),
-  to: z.string().optional().describe("Optional end timestamp, RFC3339/ISO-8601. Prefer UTC+7, e.g. 2026-08-17T15:15:00+07:00."),
+  from: z.string().optional().describe("Optional start timestamp, RFC3339/ISO-8601. If omitted, the tool uses now minus 15 minutes. BO API examples use UTC Z, e.g. 2026-08-17T09:17:00Z."),
+  to: z.string().optional().describe("Optional end timestamp, RFC3339/ISO-8601. If omitted, the tool uses now. BO API examples use UTC Z, e.g. 2026-08-17T09:32:35Z."),
   domain: z.string().optional().describe("Optional domain/host filter."),
   site: z.string().optional().describe("Optional site/application/customer filter if the API supports it."),
   interval: z.string().optional().describe("Optional aggregation interval. BO API values include TI_EVERY_1_MINUTE and TI_EVERY_15_MINUTES."),
@@ -139,9 +148,10 @@ server.tool(
   async ({ from, to, domain, site, interval, pageTotal, fieldLimit, fieldReport, method, extraQueryJson }) => {
     const extra = parseExtra(extraQueryJson);
     if (typeof extra === "string") return { content: [{ type: "text" as const, text: extra }] };
+    const window = defaultWindow(15);
     return callReportApi("bandwidth_realtime", BANDWIDTH_API_URL, {
-      ...(from ? { from } : {}),
-      ...(to ? { to } : {}),
+      from: from || window.from,
+      to: to || window.to,
       ...(domain ? { domain } : {}),
       ...(site ? { site } : {}),
       "page.total": pageTotal ?? true,
@@ -162,9 +172,10 @@ server.tool(
   async ({ from, to, domain, site, interval, pageTotal, fieldLimit, fieldReport, method, extraQueryJson }) => {
     const extra = parseExtra(extraQueryJson);
     if (typeof extra === "string") return { content: [{ type: "text" as const, text: extra }] };
+    const window = defaultWindow(15);
     return callReportApi("request_summary", REQUEST_API_URL, {
-      ...(from ? { from } : {}),
-      ...(to ? { to } : {}),
+      from: from || window.from,
+      to: to || window.to,
       ...(domain ? { domain } : {}),
       ...(site ? { site } : {}),
       "page.total": pageTotal ?? true,

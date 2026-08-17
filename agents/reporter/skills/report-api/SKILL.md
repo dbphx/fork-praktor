@@ -27,17 +27,18 @@ For relative windows:
 - "real time" or "hiện tại": use the last 5 minutes unless the user specifies another window.
 - "15p trước": use now minus 15 minutes to now.
 - "hôm nay": use local UTC+7 start of day to now.
+- If you accidentally omit `from` or `to`, the tool defaults to the last 15 minutes so the BO API still receives required time fields.
 
-Prefer timestamps with `+07:00`, for example:
+The BO report API examples use UTC `Z` timestamps. You may send UTC `Z` timestamps for API calls, then display the window in UTC+7 to the user. Example:
 
 ```json
 {
-  "from": "2026-08-17T15:00:00+07:00",
-  "to": "2026-08-17T15:05:00+07:00"
+  "from": "2026-08-17T09:17:00Z",
+  "to": "2026-08-17T09:32:35Z"
 }
 ```
 
-If the API rejects offset timestamps, retry once with equivalent UTC `Z` timestamps.
+If the API rejects offset timestamps, retry with equivalent UTC `Z` timestamps.
 
 If the API returns HTTP 400:
 
