@@ -244,6 +244,14 @@ function setupAgentMail(): void {
 
 function loadSystemPrompt(includeIdentity = true): string {
   const parts: string[] = [];
+  const now = new Date();
+  parts.push(
+    "RUNTIME CONTEXT\n" +
+    `- Current local time: ${now.toString()}\n` +
+    `- Current UTC time: ${now.toISOString()}\n` +
+    `- Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone || process.env.TZ || "unknown"}\n` +
+    "- For relative time requests like today, now, last 15 minutes, or yesterday, use this runtime context. Do not invent a different current date."
+  );
 
   // User profile (loaded before global instructions so agents know the user)
   try {

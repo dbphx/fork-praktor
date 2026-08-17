@@ -95,12 +95,14 @@ server.tool(
     const started = Date.now();
     let response: Response;
     try {
+      console.error(`[mcp-log-api] request method=${selectedMethod} url=${selectedMethod === "GET" ? url.toString() : LOG_API_URL} body=${selectedMethod === "POST" ? JSON.stringify(baseParams) : ""}`);
       response = await fetch(url, init);
     } catch (err) {
       return { content: [{ type: "text" as const, text: `Error: Log API request failed: ${err}` }] };
     }
     const body = await response.text();
     const elapsedMs = Date.now() - started;
+    console.error(`[mcp-log-api] response status=${response.status} elapsedMs=${elapsedMs} bytes=${body.length}`);
 
     return {
       content: [
