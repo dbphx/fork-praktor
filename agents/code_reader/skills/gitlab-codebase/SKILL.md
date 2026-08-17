@@ -1,11 +1,13 @@
 ---
 name: gitlab-codebase
-description: Read, clone, inspect, and explain GitLab-hosted codebases using GITLAB_DOMAIN and GITLAB_TOKEN from the environment. Use when a user asks to inspect a GitLab repo, trace implementation, find files/functions/routes/jobs/config, review code, compare branches, summarize a repository, or answer codebase questions grounded in source.
+description: Read, clone, inspect, understand, map, and trace bugs in GitLab-hosted codebases using GITLAB_DOMAIN and GITLAB_TOKEN from the environment. Use when a user asks to inspect a GitLab repo, understand the whole codebase, trace a bug, find files/functions/routes/jobs/config, review code, compare branches, summarize architecture, or answer implementation questions grounded in source.
 ---
 
 # GitLab Codebase Skill
 
 Use this skill for GitLab source-code reading and codebase analysis.
+
+For bug tracing, the goal is not only to find a keyword. Build a working map of the codebase first, then trace the concrete execution path that could produce the symptom.
 
 ## Environment
 
@@ -79,6 +81,96 @@ git remote set-url origin "https://${GITLAB_DOMAIN}/${PROJECT_PATH}.git"
 
 Prefer `rg` over `grep`, and prefer structured parsers or framework conventions over ad hoc assumptions.
 
+## Whole-Codebase Map
+
+Before tracing a bug or claiming broad understanding, create or refresh a map:
+
+```sh
+sh /workspace/agent/skills/gitlab-codebase/scripts/codebase-map.sh "$REPO_DIR" /workspace/agent/notes/codebase-map.md
+```
+
+Read `/workspace/agent/notes/codebase-map.md`, then inspect the files it points to. The map is only a starting index; do not treat it as complete proof.
+
+Build this mental model:
+
+- runtime entrypoints: binaries, servers, workers, scheduled jobs, CLIs
+- framework shape: routes/controllers/handlers, middleware, dependency injection
+- business layers: service/usecase/domain modules
+- data layer: models, repositories, migrations, schema, caches
+- integrations: HTTP clients, queues, storage, auth, feature flags
+- configuration: env vars, YAML/TOML/JSON, deployment manifests
+- tests: unit/integration/e2e tests around the suspected behavior
+
+If the repo is a monorepo, identify the relevant service first, but still inspect shared libraries and deployment/config files that can affect the bug.
+
+## Bug Trace Workflow
+
+Use this workflow when the user provides a symptom, log line, stack trace, endpoint, job name, UI action, status code, or failing behavior.
+
+1. Restate the symptom and known inputs:
+   - repo, branch/ref, environment if known
+   - endpoint/job/module/user action
+   - observed error, status, panic, wrong output, or missing side effect
+2. Map the codebase with `codebase-map.sh`.
+3. Locate the likely entrypoint:
+   - HTTP route/controller
+   - CLI command
+   - queue consumer/job
+   - scheduled task
+   - frontend event/API client
+4. Trace downstream in order:
+   - validation and request parsing
+   - auth/permission/tenant checks
+   - service/usecase logic
+   - DB/cache/external calls
+   - error wrapping and response mapping
+5. Trace upstream when needed:
+   - config/env defaults
+   - dependency injection or module registration
+   - migrations/schema assumptions
+   - deployment manifests and feature flags
+6. Check tests that should cover the path. If none exist, note the missing test explicitly.
+7. Produce a bug hypothesis only after reading the relevant files. Mark it as confirmed only when the code path proves it.
+
+Useful search patterns:
+
+```sh
+rg -n "exact_error|status_code|route_path|job_name|config_key|table_name|function_name" "$REPO_DIR"
+rg -n "TODO|FIXME|panic|throw new|return err|errors\\.New|fmt\\.Errorf|logger\\.(error|warn)" "$REPO_DIR"
+rg -n "process\\.env|os\\.Getenv|viper\\.|config\\.|env\\." "$REPO_DIR"
+```
+
+When tracing across languages, follow imports/calls manually with `rg` and direct file reads. Do not rely on a single filename match.
+
+## Bug Trace Output
+
+For bug-trace answers, use this shape:
+
+```text
+Trace summary
+• Repo/ref inspected: ...
+• Entry point: file:line
+• Path: A -> B -> C
+
+Likely cause
+• ...
+
+Evidence
+• file:line - observed code fact
+• file:line - observed code fact
+
+Fix direction
+• ...
+
+Tests to add/run
+• ...
+
+Uncertainty
+• ...
+```
+
+If the evidence is insufficient, say exactly which file, config, branch, log, or runtime input is missing.
+
 ## Review Mode
 
 When the user asks for a review, lead with findings:
@@ -101,7 +193,9 @@ Prioritize bugs, security risks, behavioral regressions, missing tests, deployme
 Be explicit about what was read:
 
 - repo/path/ref inspected
+- whether `/workspace/agent/notes/codebase-map.md` was generated/read for bug tracing
 - key files and functions
+- entrypoint and traced call path
 - observed behavior
 - inference and uncertainty
 

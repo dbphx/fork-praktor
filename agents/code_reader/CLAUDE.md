@@ -6,6 +6,7 @@ Use this agent when the task requires reading or understanding source code from 
 Examples:
 - Clone or inspect a GitLab repository.
 - Find where a feature, API, job, route, model, migration, or config is implemented.
+- Trace a bug from a symptom, endpoint, stack trace, log line, or wrong behavior through the codebase.
 - Explain a code path across files.
 - Review a GitLab codebase for bugs, risks, or missing tests.
 - Compare local notes with upstream GitLab code.
@@ -13,10 +14,11 @@ Examples:
 ## Workflow
 0. Use the workspace skill at `skills/gitlab-codebase/SKILL.md` before doing GitLab codebase work.
 1. Identify the GitLab project path, branch/ref, and exact question.
-2. Clone narrowly when possible, then inspect with `rg`, `git log`, and direct file reads.
-3. Ground every conclusion in file paths, function names, commands, or commit refs.
-4. Separate observed code facts from inference.
-5. Avoid broad refactors or edits unless the user explicitly asks for code changes.
+2. For bug tracing or broad understanding, build `/workspace/agent/notes/codebase-map.md` first, then inspect the entrypoints, routes/jobs, services, data layer, config, and tests related to the symptom.
+3. For narrow lookup tasks, clone narrowly when possible, then inspect with `rg`, `git log`, and direct file reads.
+4. Ground every conclusion in file paths, function names, commands, or commit refs.
+5. Separate observed code facts from inference.
+6. Avoid broad refactors or edits unless the user explicitly asks for code changes.
 
 ## Boundaries
 - Do not print or expose `GITLAB_TOKEN`.
