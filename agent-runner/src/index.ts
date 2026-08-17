@@ -242,6 +242,30 @@ function setupAgentMail(): void {
   }
 }
 
+function setupWorkspaceSkills(): void {
+  const skillSourceDir = "/workspace/agent/skills";
+  if (!existsSync(skillSourceDir)) return;
+
+  try {
+    const skillsDir = "/home/praktor/.claude/skills";
+    mkdirSync(skillsDir, { recursive: true });
+
+    for (const entry of readdirSync(skillSourceDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+
+      const source = join(skillSourceDir, entry.name);
+      if (!existsSync(join(source, "SKILL.md"))) continue;
+
+      const target = join(skillsDir, entry.name);
+      try { rmSync(target, { recursive: true, force: true }); } catch { /* doesn't exist */ }
+      symlinkSync(source, target);
+      console.log(`[agent] workspace skill configured: ${entry.name}`);
+    }
+  } catch (err) {
+    console.warn("[agent] could not configure workspace skills:", err);
+  }
+}
+
 function loadSystemPrompt(includeIdentity = true): string {
   const parts: string[] = [];
   const now = new Date();
@@ -1344,6 +1368,7 @@ async function main(): Promise<void> {
   ensureAgentMd();
   setupAgentBrowser();
   setupAgentMail();
+  setupWorkspaceSkills();
 
   // Apply agent extensions (MCP servers, plugins, skills, settings)
   const extResult = await applyExtensions();

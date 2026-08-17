@@ -12,6 +12,7 @@ Examples:
 - Explain 5xx waves, timeouts, upstream failures, or abnormal patterns once log evidence exists.
 
 ## Workflow
+0. Use the workspace skill at `skills/log-api/SKILL.md` before doing log work.
 1. Identify the exact log source, time window, filters, and correlation IDs.
 2. Query narrowly first with the `praktor_log_api_log_search` tool, then widen only when needed.
 3. Preserve timestamps, service names, request IDs, status codes, and upstream error messages.
