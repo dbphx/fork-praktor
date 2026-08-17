@@ -11,10 +11,11 @@ Use this skill for every request that needs WAF/security-engine log data.
 
 1. Call `praktor_log_api_log_search` before claiming whether logs exist.
 2. Use the runtime context current date/time for relative requests such as "today", "now", "15p trước", "hôm qua", or "tuần này".
-3. Convert local Asia/Ho_Chi_Minh windows to UTC ISO timestamps unless the user gives an explicit timezone.
-4. Preserve observed facts separately from inference.
-5. Never print secret values. The bearer token is read by the tool from `/workspace/.log_api_key`.
-6. If the API returns an error, report the HTTP status and validation message, then adjust the query if possible.
+3. Treat Asia/Ho_Chi_Minh / UTC+7 as the default timezone for log searches unless the user gives another timezone.
+4. Show all user-facing search windows and log timestamps in UTC+7 first. Include UTC only as supporting detail when useful.
+5. Preserve observed facts separately from inference.
+6. Never print secret values. The bearer token is read by the tool from `/workspace/.log_api_key`.
+7. If the API returns an error, report the HTTP status and validation message, then adjust the query if possible.
 
 ## Required Tool
 
@@ -22,8 +23,8 @@ Call:
 
 ```json
 {
-  "from": "YYYY-MM-DDTHH:mm:ssZ",
-  "to": "YYYY-MM-DDTHH:mm:ssZ"
+  "from": "YYYY-MM-DDTHH:mm:ss+07:00",
+  "to": "YYYY-MM-DDTHH:mm:ss+07:00"
 }
 ```
 
@@ -47,18 +48,20 @@ Prefer `pageSize: 1` and `pageTotal: true` for connectivity or count checks. Pre
 
 ## Time Windows
 
-For "today" in Asia/Ho_Chi_Minh:
+Prefer RFC3339 timestamps with `+07:00` offset for Log API calls. If the API rejects offset timestamps, retry once with UTC `Z` timestamps converted from the same UTC+7 window.
+
+For "today" in Asia/Ho_Chi_Minh / UTC+7:
 
 1. Set `from` to local start of day `00:00:00`.
 2. Set `to` to current local time.
-3. Convert both to UTC ISO timestamps.
-4. Mention the local window and UTC window in the answer.
+3. Send timestamps as `YYYY-MM-DDTHH:mm:ss+07:00` when possible.
+4. Mention the UTC+7 window in the answer. Mention UTC only if debugging the query.
 
 For "last N minutes":
 
 1. Set `to` to current runtime time.
 2. Set `from` to `to - N minutes`.
-3. Convert both to UTC ISO timestamps.
+3. Send both as `+07:00` timestamps when possible.
 
 Do not reuse stale dates from previous messages. If the tool result date conflicts with runtime context, trust runtime context and query again.
 
@@ -82,8 +85,8 @@ Keep Telegram output compact:
 
 ```text
 Kết quả kiểm tra log
-• Window local: ...
-• Window UTC: ...
+• Window UTC+7: ...
+• Window UTC: ... (optional)
 • Filter: ...
 • Total: ...
 • Samples: ...
@@ -94,11 +97,13 @@ When no logs are found:
 
 ```text
 Không thấy log trong window đã query.
-• Window local: ...
-• Window UTC: ...
+• Window UTC+7: ...
+• Window UTC: ... (optional)
 • Filter: ...
 • Tool status: ...
 ```
+
+When summarizing sample log records, convert any `Z` timestamps in the API response to UTC+7 before showing them to the user. Keep the original UTC timestamp only when it helps audit the query.
 
 When API access works but parameters are missing or invalid, say that the API is reachable and show the required parameter issue without exposing credentials.
 

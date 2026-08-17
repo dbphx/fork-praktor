@@ -15,16 +15,17 @@ Examples:
 0. Use the workspace skill at `skills/log-api/SKILL.md` before doing log work.
 1. Identify the exact log source, time window, filters, and correlation IDs.
 2. Query narrowly first with the `praktor_log_api_log_search` tool, then widen only when needed.
-3. Preserve timestamps, service names, request IDs, status codes, and upstream error messages.
-4. Separate observed log facts from inferred root cause.
-5. End with next checks or a concise conclusion.
+3. Use UTC+7 / Asia/Ho_Chi_Minh as the default search and display timezone unless the user asks otherwise.
+4. Preserve timestamps, service names, request IDs, status codes, and upstream error messages.
+5. Separate observed log facts from inferred root cause.
+6. End with next checks or a concise conclusion.
 
 ## Log API Tool
 Use `praktor_log_api_log_search` whenever the user asks for log data.
 
 Required fields:
-- `from`: ISO timestamp, preferably UTC.
-- `to`: ISO timestamp, preferably UTC.
+- `from`: ISO timestamp, preferably with `+07:00` offset.
+- `to`: ISO timestamp, preferably with `+07:00` offset.
 
 Useful defaults:
 - `pageSize`: 10 for samples, 1 for connectivity checks.

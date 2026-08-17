@@ -29,10 +29,10 @@ function truncate(text: string): string {
 
 server.tool(
   "log_search",
-  "Query the configured Log API using the vault bearer token. Use this for log_analyzer requests that need log data. from and to are required ISO timestamps, preferably UTC like 2026-08-16T12:30:00Z.",
+  "Query the configured Log API using the vault bearer token. Use this for log_analyzer requests that need log data. from and to are required RFC3339/ISO timestamps. For user-facing log searches, prefer UTC+7 timestamps like 2026-08-16T19:30:00+07:00; UTC Z timestamps are also accepted when needed.",
   {
-    from: z.string().describe("Required start timestamp, ISO-8601. Example: 2026-08-16T12:20:00Z"),
-    to: z.string().describe("Required end timestamp, ISO-8601. Example: 2026-08-16T12:35:00Z"),
+    from: z.string().describe("Required start timestamp, RFC3339/ISO-8601. Prefer UTC+7 for log_analyzer, e.g. 2026-08-16T19:20:00+07:00. UTC Z is also valid."),
+    to: z.string().describe("Required end timestamp, RFC3339/ISO-8601. Prefer UTC+7 for log_analyzer, e.g. 2026-08-16T19:35:00+07:00. UTC Z is also valid."),
     pageSize: z.number().int().positive().max(1000).optional().describe("Requested page size. Sent as page.size."),
     pageTotal: z.boolean().optional().describe("Whether to ask the API for total count. Sent as page.total."),
     secsEngineMatchedFilter: z.string().optional().describe("Optional secsEngineMatchedFilter, e.g. SEMF_MATCHED."),
@@ -114,6 +114,9 @@ server.tool(
               status: response.status,
               statusText: response.statusText,
               elapsedMs,
+              queryTimezone: "UTC+7",
+              displayTimezone: "Asia/Ho_Chi_Minh (+07:00)",
+              note: "Show user-facing log windows and timestamps in UTC+7 unless the user requested another timezone.",
               url: selectedMethod === "GET" ? url.toString() : LOG_API_URL,
               body: truncate(body),
             },
