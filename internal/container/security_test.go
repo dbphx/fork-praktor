@@ -1,10 +1,11 @@
 package container
 
 import (
+	"reflect"
 	"testing"
 
-	dockercontainer "github.com/moby/moby/api/types/container"
 	"github.com/dbphx/fork-praktor/internal/config"
+	dockercontainer "github.com/moby/moby/api/types/container"
 )
 
 func balancedSecurity() config.SecurityConfig {
@@ -95,5 +96,21 @@ func TestDefaultsHaveBalancedSecurity(t *testing.T) {
 	}
 	if len(s.AddCapabilities) != 5 {
 		t.Errorf("AddCapabilities = %v", s.AddCapabilities)
+	}
+}
+
+func TestParseExtraHosts(t *testing.T) {
+	got := parseExtraHosts("gitlab.internal:10.0.0.10, api.internal:10.0.0.11\ncache.internal:10.0.0.12;")
+	want := []string{
+		"gitlab.internal:10.0.0.10",
+		"api.internal:10.0.0.11",
+		"cache.internal:10.0.0.12",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("parseExtraHosts() = %#v, want %#v", got, want)
+	}
+
+	if got := parseExtraHosts("  "); got != nil {
+		t.Fatalf("parseExtraHosts(blank) = %#v, want nil", got)
 	}
 }

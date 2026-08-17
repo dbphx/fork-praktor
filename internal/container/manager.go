@@ -210,6 +210,7 @@ func (m *Manager) StartAgent(ctx context.Context, opts AgentOpts) (*ContainerInf
 	hostCfg := &dockercontainer.HostConfig{
 		Binds:       mounts,
 		NetworkMode: dockercontainer.NetworkMode(m.networkName),
+		ExtraHosts:  parseExtraHosts(os.Getenv("PRAKTOR_AGENT_EXTRA_HOSTS")),
 	}
 	m.applySecurity(hostCfg, opts.Security)
 
@@ -276,6 +277,24 @@ func (m *Manager) StartAgent(ctx context.Context, opts AgentOpts) (*ContainerInf
 
 	slog.Info("agent container started", "agent", opts.AgentID, "container", resp.ID[:12])
 	return info, nil
+}
+
+func parseExtraHosts(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+
+	var hosts []string
+	for _, item := range strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == '\n' || r == ';'
+	}) {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		hosts = append(hosts, item)
+	}
+	return hosts
 }
 
 // applySecurity applies the resolved Docker hardening profile to the
