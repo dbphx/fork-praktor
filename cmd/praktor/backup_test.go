@@ -18,19 +18,19 @@ func TestSplitVolumePath(t *testing.T) {
 		wantVol string
 		wantRel string
 	}{
-		{"simple file", "praktor-data/db.sqlite", "praktor-data", "db.sqlite"},
-		{"nested path", "praktor-wk-agent1/subdir/file.txt", "praktor-wk-agent1", "subdir/file.txt"},
-		{"directory with slash", "praktor-data/subdir/", "praktor-data", "subdir/"},
-		{"volume root dir", "praktor-data/", "praktor-data", "./"},
-		{"volume bare name", "praktor-data", "praktor-data", "./"},
-		{"leading dot-slash", "./praktor-data/file.txt", "praktor-data", "file.txt"},
-		{"leading slash", "/praktor-data/file.txt", "praktor-data", "file.txt"},
+		{"simple file", "fork-praktor-data/db.sqlite", "fork-praktor-data", "db.sqlite"},
+		{"nested path", "fork-praktor-wk-agent1/subdir/file.txt", "fork-praktor-wk-agent1", "subdir/file.txt"},
+		{"directory with slash", "fork-praktor-data/subdir/", "fork-praktor-data", "subdir/"},
+		{"volume root dir", "fork-praktor-data/", "fork-praktor-data", "./"},
+		{"volume bare name", "fork-praktor-data", "fork-praktor-data", "./"},
+		{"leading dot-slash", "./fork-praktor-data/file.txt", "fork-praktor-data", "file.txt"},
+		{"leading slash", "/fork-praktor-data/file.txt", "fork-praktor-data", "file.txt"},
 		{"non-praktor prefix", "other-volume/file.txt", "", ""},
 		{"empty string", "", "", ""},
 		{"just a slash", "/", "", ""},
 		{"dot only", ".", "", ""},
-		{"home volume", "praktor-home-myagent/config", "praktor-home-myagent", "config"},
-		{"nix volume", "praktor-nix-myagent/store/path", "praktor-nix-myagent", "store/path"},
+		{"home volume", "fork-praktor-home-myagent/config", "fork-praktor-home-myagent", "config"},
+		{"nix volume", "fork-praktor-nix-myagent/store/path", "fork-praktor-nix-myagent", "store/path"},
 	}
 
 	for _, tt := range tests {
@@ -72,7 +72,7 @@ func TestFormatSize(t *testing.T) {
 }
 
 // createTestArchive builds a zstd-compressed tar with the given entries.
-// Each entry is a path like "praktor-data/file.txt" with the given content.
+// Each entry is a path like "fork-praktor-data/file.txt" with the given content.
 func createTestArchive(t *testing.T, entries map[string]string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "test.tar.zst")
@@ -109,11 +109,11 @@ func createTestArchive(t *testing.T, entries map[string]string) string {
 
 func TestScanArchiveVolumes(t *testing.T) {
 	archivePath := createTestArchive(t, map[string]string{
-		"praktor-data/db.sqlite":               "data",
-		"praktor-data/nats/":                   "",
-		"praktor-wk-agent1/workspace/file.go":  "code",
-		"praktor-home-agent1/.bashrc":          "bashrc",
-		"praktor-wk-agent1/workspace/other.go": "more code",
+		"fork-praktor-data/db.sqlite":               "data",
+		"fork-praktor-data/nats/":                   "",
+		"fork-praktor-wk-agent1/workspace/file.go":  "code",
+		"fork-praktor-home-agent1/.bashrc":          "bashrc",
+		"fork-praktor-wk-agent1/workspace/other.go": "more code",
 	})
 
 	volumes, err := scanArchiveVolumes(archivePath)
@@ -130,7 +130,7 @@ func TestScanArchiveVolumes(t *testing.T) {
 	for _, v := range volumes {
 		found[v] = true
 	}
-	for _, want := range []string{"praktor-data", "praktor-wk-agent1", "praktor-home-agent1"} {
+	for _, want := range []string{"fork-praktor-data", "fork-praktor-wk-agent1", "fork-praktor-home-agent1"} {
 		if !found[want] {
 			t.Errorf("expected volume %q not found in %v", want, volumes)
 		}
@@ -151,9 +151,9 @@ func TestScanArchiveVolumes_Empty(t *testing.T) {
 
 func TestScanArchiveVolumes_NonPraktorEntries(t *testing.T) {
 	archivePath := createTestArchive(t, map[string]string{
-		"other-volume/file.txt":  "data",
-		"random-file.txt":        "data",
-		"praktor-data/db.sqlite": "data",
+		"other-volume/file.txt":       "data",
+		"random-file.txt":             "data",
+		"fork-praktor-data/db.sqlite": "data",
 	})
 
 	volumes, err := scanArchiveVolumes(archivePath)
@@ -163,8 +163,8 @@ func TestScanArchiveVolumes_NonPraktorEntries(t *testing.T) {
 	if len(volumes) != 1 {
 		t.Fatalf("expected 1 volume, got %d: %v", len(volumes), volumes)
 	}
-	if volumes[0] != "praktor-data" {
-		t.Errorf("expected praktor-data, got %q", volumes[0])
+	if volumes[0] != "fork-praktor-data" {
+		t.Errorf("expected fork-praktor-data, got %q", volumes[0])
 	}
 }
 
@@ -198,10 +198,10 @@ func TestArchiveRoundTrip(t *testing.T) {
 		content string
 		isDir   bool
 	}{
-		{"praktor-data/db.sqlite", "sqlite-data", false},
-		{"praktor-data/subdir/", "", true},
-		{"praktor-data/subdir/file.txt", "hello", false},
-		{"praktor-wk-coder/main.go", "package main", false},
+		{"fork-praktor-data/db.sqlite", "sqlite-data", false},
+		{"fork-praktor-data/subdir/", "", true},
+		{"fork-praktor-data/subdir/file.txt", "hello", false},
+		{"fork-praktor-wk-coder/main.go", "package main", false},
 	}
 
 	for _, e := range entries {
@@ -244,10 +244,10 @@ func TestArchiveRoundTrip(t *testing.T) {
 		vol string
 		rel string
 	}{
-		{"praktor-data", "db.sqlite"},
-		{"praktor-data", "subdir/"},
-		{"praktor-data", "subdir/file.txt"},
-		{"praktor-wk-coder", "main.go"},
+		{"fork-praktor-data", "db.sqlite"},
+		{"fork-praktor-data", "subdir/"},
+		{"fork-praktor-data", "subdir/file.txt"},
+		{"fork-praktor-wk-coder", "main.go"},
 	}
 
 	for i, exp := range expected {

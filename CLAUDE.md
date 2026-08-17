@@ -225,11 +225,11 @@ All containers use Docker named volumes (no host path dependencies):
 
 | Volume | Container Path | Mode | Purpose |
 |--------|---------------|------|---------|
-| `praktor-wk-{workspace}` | `/workspace/agent` | rw | Agent workspace |
-| `praktor-global` | `/workspace/global` | ro | Global instructions |
-| `praktor-home-{workspace}` | `/home/praktor` | rw | Agent home directory |
+| `fork-praktor-wk-{workspace}` | `/workspace/agent` | rw | Agent workspace |
+| `fork-praktor-global` | `/workspace/global` | ro | Global instructions |
+| `fork-praktor-home-{workspace}` | `/home/praktor` | rw | Agent home directory |
 
-The gateway uses `praktor-data` for SQLite/NATS and `praktor-global` for global instructions. Both gateway and agents run as non-root user `praktor` (uid 10321).
+The gateway uses `fork-praktor-data` for SQLite/NATS and `fork-praktor-global` for global instructions. Both gateway and agents run as non-root user `praktor` (uid 10321).
 
 ## Container Security Hardening
 

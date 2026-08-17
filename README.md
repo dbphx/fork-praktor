@@ -141,7 +141,7 @@ docker compose up -d --build fork-praktor
 docker compose logs -f fork-praktor
 ```
 
-Only `fork-praktor` should stay running as the Compose service. Agent containers such as `praktor-agent-general` are created on demand by the gateway when a chat message arrives, using the local `praktor-agent:latest` image.
+Only `fork-praktor` should stay running as the Compose service. Agent containers such as `fork-praktor-agent-general` are created on demand by the gateway when a chat message arrives, using the local `fork-praktor-agent:latest` image.
 
 If `go mod download` fails during Docker build because `proxy.golang.org` resets long downloads, set an alternate module proxy in `.env` and rebuild:
 

@@ -138,7 +138,7 @@ func (m *Manager) StartAgent(ctx context.Context, opts AgentOpts) (*ContainerInf
 		return nil, err
 	}
 
-	containerName := fmt.Sprintf("praktor-agent-%s", opts.AgentID)
+	containerName := fmt.Sprintf("fork-praktor-agent-%s", opts.AgentID)
 
 	// Remove any stale container with the same name
 	timeout := 5
@@ -532,8 +532,8 @@ func (m *Manager) BuildImage(ctx context.Context) error {
 // ReadVolumeFile reads a file from a Docker named volume by creating a
 // temporary container, copying the file out, and removing the container.
 func (m *Manager) ReadVolumeFile(ctx context.Context, workspace, filePath, image string) (string, error) {
-	volName := fmt.Sprintf("praktor-wk-%s", sanitizeVolumeName(workspace))
-	containerName := fmt.Sprintf("praktor-vol-tmp-%s-%d", sanitizeVolumeName(workspace), time.Now().UnixNano())
+	volName := fmt.Sprintf("fork-praktor-wk-%s", sanitizeVolumeName(workspace))
+	containerName := fmt.Sprintf("fork-praktor-vol-tmp-%s-%d", sanitizeVolumeName(workspace), time.Now().UnixNano())
 
 	resp, err := m.docker.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Config:     &dockercontainer.Config{Image: image, Entrypoint: []string{"true"}},
@@ -568,8 +568,8 @@ func (m *Manager) ReadVolumeFile(ctx context.Context, workspace, filePath, image
 // WriteVolumeFile writes a file into a Docker named volume by creating a
 // temporary container, copying the file in, and removing the container.
 func (m *Manager) WriteVolumeFile(ctx context.Context, workspace, filePath, content, image string) error {
-	volName := fmt.Sprintf("praktor-wk-%s", sanitizeVolumeName(workspace))
-	containerName := fmt.Sprintf("praktor-vol-tmp-%s-%d", sanitizeVolumeName(workspace), time.Now().UnixNano())
+	volName := fmt.Sprintf("fork-praktor-wk-%s", sanitizeVolumeName(workspace))
+	containerName := fmt.Sprintf("fork-praktor-vol-tmp-%s-%d", sanitizeVolumeName(workspace), time.Now().UnixNano())
 
 	resp, err := m.docker.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Config:     &dockercontainer.Config{Image: image, Entrypoint: []string{"true"}},
@@ -614,8 +614,8 @@ func (m *Manager) WriteVolumeFile(ctx context.Context, workspace, filePath, cont
 // temp-container pattern as WriteVolumeFile but accepts []byte and creates
 // parent directories with correct ownership (uid/gid 10321).
 func (m *Manager) WriteVolumeBytes(ctx context.Context, workspace, filePath string, data []byte, image string) error {
-	volName := fmt.Sprintf("praktor-wk-%s", sanitizeVolumeName(workspace))
-	containerName := fmt.Sprintf("praktor-vol-tmp-%s-%d", sanitizeVolumeName(workspace), time.Now().UnixNano())
+	volName := fmt.Sprintf("fork-praktor-wk-%s", sanitizeVolumeName(workspace))
+	containerName := fmt.Sprintf("fork-praktor-vol-tmp-%s-%d", sanitizeVolumeName(workspace), time.Now().UnixNano())
 
 	resp, err := m.docker.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Config:     &dockercontainer.Config{Image: image, Entrypoint: []string{"true"}},
@@ -687,12 +687,12 @@ func (m *Manager) seedWorkspace(ctx context.Context, opts AgentOpts) error {
 		workspace = opts.AgentID
 	}
 	seedDir := filepath.Join(config.AgentsBasePath, workspace)
-	volName := fmt.Sprintf("praktor-wk-%s", sanitizeVolumeName(workspace))
+	volName := fmt.Sprintf("fork-praktor-wk-%s", sanitizeVolumeName(workspace))
 	return m.seedDirectoryToVolume(ctx, seedDir, volName, workspace, opts)
 }
 
 func (m *Manager) seedGlobalWorkspace(ctx context.Context, opts AgentOpts) error {
-	return m.seedDirectoryToVolume(ctx, filepath.Join(config.AgentsBasePath, "global"), "praktor-global", "global", opts)
+	return m.seedDirectoryToVolume(ctx, filepath.Join(config.AgentsBasePath, "global"), "fork-praktor-global", "global", opts)
 }
 
 func (m *Manager) seedDirectoryToVolume(ctx context.Context, seedDir, volName, label string, opts AgentOpts) error {
@@ -711,7 +711,7 @@ func (m *Manager) seedDirectoryToVolume(ctx context.Context, seedDir, volName, l
 	if image == "" {
 		image = m.cfg.Image
 	}
-	containerName := fmt.Sprintf("praktor-seed-%s-%d", sanitizeVolumeName(label), time.Now().UnixNano())
+	containerName := fmt.Sprintf("fork-praktor-seed-%s-%d", sanitizeVolumeName(label), time.Now().UnixNano())
 	resp, err := m.docker.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Config:     &dockercontainer.Config{Image: image, Entrypoint: []string{"true"}},
 		HostConfig: &dockercontainer.HostConfig{Binds: []string{volName + ":/vol"}},

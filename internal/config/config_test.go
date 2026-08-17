@@ -10,8 +10,8 @@ import (
 func TestDefaults(t *testing.T) {
 	cfg := defaults()
 
-	if cfg.Defaults.Image != "praktor-agent:latest" {
-		t.Errorf("expected default image praktor-agent:latest, got %s", cfg.Defaults.Image)
+	if cfg.Defaults.Image != "fork-praktor-agent:latest" {
+		t.Errorf("expected default image fork-praktor-agent:latest, got %s", cfg.Defaults.Image)
 	}
 	if cfg.Defaults.MaxRunning != 5 {
 		t.Errorf("expected max_running 5, got %d", cfg.Defaults.MaxRunning)

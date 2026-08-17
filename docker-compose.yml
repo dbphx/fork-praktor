@@ -1,7 +1,7 @@
 services:
   fork-praktor:
     container_name: insky.fork.praktor
-    image: praktor:latest
+    image: fork-praktor:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -45,7 +45,7 @@ services:
     restart: unless-stopped
 
   fork-agent-base:
-    image: praktor-agent-base:latest
+    image: fork-praktor-agent-base:latest
     build:
       context: .
       dockerfile: Dockerfile.agent-base
@@ -55,7 +55,7 @@ services:
       - build
 
   fork-agent:
-    image: praktor-agent:latest
+    image: fork-praktor-agent:latest
     build:
       context: .
       dockerfile: Dockerfile.agent

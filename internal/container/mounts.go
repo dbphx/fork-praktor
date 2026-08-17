@@ -16,17 +16,17 @@ func buildMounts(opts AgentOpts) []string {
 	var binds []string
 
 	// Agent-specific workspace (named volume)
-	binds = append(binds, fmt.Sprintf("praktor-wk-%s:/workspace/agent", workspace))
+	binds = append(binds, fmt.Sprintf("fork-praktor-wk-%s:/workspace/agent", workspace))
 
 	// Global shared instructions (named volume, read-only)
-	binds = append(binds, "praktor-global:/workspace/global:ro")
+	binds = append(binds, "fork-praktor-global:/workspace/global:ro")
 
 	// Claude session data (named volume)
-	binds = append(binds, fmt.Sprintf("praktor-home-%s:/home/praktor", workspace))
+	binds = append(binds, fmt.Sprintf("fork-praktor-home-%s:/home/praktor", workspace))
 
 	// Nix store (shared named volume)
 	if opts.NixEnabled {
-		binds = append(binds, fmt.Sprintf("praktor-nix-%s:/nix", workspace))
+		binds = append(binds, fmt.Sprintf("fork-praktor-nix-%s:/nix", workspace))
 	}
 
 	// Extra mounts (user-configured, kept as-is)

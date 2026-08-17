@@ -33,7 +33,7 @@ func newTestRegistry(t *testing.T) (*Registry, *store.Store) {
 	}
 
 	cfg := config.DefaultsConfig{
-		Image: "praktor-agent:latest",
+		Image: "fork-praktor-agent:latest",
 		Model: "claude-sonnet-4-5-20250929",
 	}
 
@@ -103,8 +103,8 @@ func TestResolveImage(t *testing.T) {
 	reg, _ := newTestRegistry(t)
 
 	// Both fall back to global default
-	if img := reg.ResolveImage("general"); img != "praktor-agent:latest" {
-		t.Errorf("expected image 'praktor-agent:latest', got %q", img)
+	if img := reg.ResolveImage("general"); img != "fork-praktor-agent:latest" {
+		t.Errorf("expected image 'fork-praktor-agent:latest', got %q", img)
 	}
 }
 

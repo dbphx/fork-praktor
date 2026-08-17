@@ -4,7 +4,7 @@ telegram:
   main_chat_id: 0
 
 defaults:
-  image: "praktor-agent:latest"
+  image: "fork-praktor-agent:latest"
   model: "vllm/gemma4-12b"
   max_running: 5
   idle_timeout: 10m

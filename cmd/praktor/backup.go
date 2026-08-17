@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	volumePrefix       = "praktor-"
+	volumePrefix       = "fork-praktor-"
 	defaultHelperImage = "alpine:3"
 )
 
@@ -118,7 +118,7 @@ func runBackup(args []string) error {
 }
 
 func backupVolume(ctx context.Context, docker *client.Client, tw *tar.Writer, volName, image string) error {
-	containerName := fmt.Sprintf("praktor-backup-%d", time.Now().UnixNano())
+	containerName := fmt.Sprintf("fork-praktor-backup-%d", time.Now().UnixNano())
 
 	resp, err := docker.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Config:     &dockercontainer.Config{Image: image, Entrypoint: []string{"true"}},
@@ -310,7 +310,7 @@ func runRestore(args []string) error {
 			return fmt.Errorf("create volume %s: %w", volName, err)
 		}
 
-		ctrName := fmt.Sprintf("praktor-restore-%d", time.Now().UnixNano())
+		ctrName := fmt.Sprintf("fork-praktor-restore-%d", time.Now().UnixNano())
 		resp, err := docker.ContainerCreate(ctx, client.ContainerCreateOptions{
 			Config: &dockercontainer.Config{
 				Image:        helperImage,
@@ -484,7 +484,7 @@ func scanArchiveVolumes(path string) ([]string, error) {
 	return names, nil
 }
 
-// splitVolumePath splits "praktor-data/some/file" into ("praktor-data", "some/file").
+// splitVolumePath splits "fork-praktor-data/some/file" into ("fork-praktor-data", "some/file").
 // Returns empty volName for invalid paths.
 func splitVolumePath(name string) (volName, relPath string) {
 	// Clean leading slashes/dots
@@ -495,7 +495,7 @@ func splitVolumePath(name string) (volName, relPath string) {
 
 	idx := strings.IndexByte(name, '/')
 	if idx < 0 {
-		// Directory entry like "praktor-data" (no trailing slash was stripped)
+		// Directory entry like "fork-praktor-data" (no trailing slash was stripped)
 		if strings.HasPrefix(name, volumePrefix) {
 			return name, "./"
 		}
