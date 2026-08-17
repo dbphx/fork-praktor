@@ -4,8 +4,8 @@ import { z } from "zod";
 import { readFileSync } from "fs";
 import { pathToFileURL } from "url";
 
-const DEFAULT_BANDWIDTH_API_URL = "https://bo.insky.io.vn/analytic/report/bandwidth";
-const DEFAULT_REQUEST_API_URL = "https://bo.insky.io.vn/analytic/report/request";
+const DEFAULT_BANDWIDTH_API_URL = "https://bo.insky.io.vn/api/eco/analytic/report/bandwidth";
+const DEFAULT_REQUEST_API_URL = "https://bo.insky.io.vn/api/eco/analytic/report";
 const BANDWIDTH_API_URL = process.env.REPORT_BANDWIDTH_API_URL || DEFAULT_BANDWIDTH_API_URL;
 const REQUEST_API_URL = process.env.REPORT_REQUEST_API_URL || DEFAULT_REQUEST_API_URL;
 const TOKEN_PATH = process.env.REPORT_API_TOKEN_FILE || process.env.LOG_API_TOKEN_FILE || "/workspace/.log_api_key";
@@ -124,7 +124,10 @@ const commonParams = {
   to: z.string().optional().describe("Optional end timestamp, RFC3339/ISO-8601. Prefer UTC+7, e.g. 2026-08-17T15:15:00+07:00."),
   domain: z.string().optional().describe("Optional domain/host filter."),
   site: z.string().optional().describe("Optional site/application/customer filter if the API supports it."),
-  interval: z.string().optional().describe("Optional aggregation interval such as 1m, 5m, 1h if the API supports it."),
+  interval: z.string().optional().describe("Optional aggregation interval. BO API values include TI_EVERY_1_MINUTE and TI_EVERY_15_MINUTES."),
+  pageTotal: z.boolean().optional().describe("Whether to ask the API for total count. Sent as page.total. Default true."),
+  fieldLimit: z.string().optional().describe("BO report fieldLimit. Defaults to FL_VOLUME for bandwidth and FL_REQUEST for request summary."),
+  fieldReport: z.string().optional().describe("BO report fieldReport. Default FR_NONE."),
   method: z.enum(["GET", "POST"]).optional().describe("HTTP method. Default GET."),
   extraQueryJson: z.string().optional().describe("Optional JSON object of additional query/body fields for this report API."),
 };
@@ -133,7 +136,7 @@ server.tool(
   "bandwidth_realtime",
   "Fetch realtime traffic/bandwidth analytics from REPORT_BANDWIDTH_API_URL. Use for questions about current traffic, bandwidth, ingress/egress, bps/bytes, traffic spikes, or realtime bandwidth trend. Uses the same vault token file as log_analyzer.",
   commonParams,
-  async ({ from, to, domain, site, interval, method, extraQueryJson }) => {
+  async ({ from, to, domain, site, interval, pageTotal, fieldLimit, fieldReport, method, extraQueryJson }) => {
     const extra = parseExtra(extraQueryJson);
     if (typeof extra === "string") return { content: [{ type: "text" as const, text: extra }] };
     return callReportApi("bandwidth_realtime", BANDWIDTH_API_URL, {
@@ -141,7 +144,12 @@ server.tool(
       ...(to ? { to } : {}),
       ...(domain ? { domain } : {}),
       ...(site ? { site } : {}),
-      ...(interval ? { interval } : {}),
+      "page.total": pageTotal ?? true,
+      interval: interval || "TI_EVERY_1_MINUTE",
+      numberMinutes: 1,
+      countryKind: "CK_DEFAULT",
+      fieldLimit: fieldLimit || "FL_VOLUME",
+      fieldReport: fieldReport || "FR_NONE",
       ...extra,
     }, method);
   },
@@ -151,7 +159,7 @@ server.tool(
   "request_summary",
   "Fetch request analytics summary from REPORT_REQUEST_API_URL. Use for questions about request counts, QPS/RPS, top paths/statuses/domains, traffic summary, request spikes, or realtime request trends. Uses the same vault token file as log_analyzer.",
   commonParams,
-  async ({ from, to, domain, site, interval, method, extraQueryJson }) => {
+  async ({ from, to, domain, site, interval, pageTotal, fieldLimit, fieldReport, method, extraQueryJson }) => {
     const extra = parseExtra(extraQueryJson);
     if (typeof extra === "string") return { content: [{ type: "text" as const, text: extra }] };
     return callReportApi("request_summary", REQUEST_API_URL, {
@@ -159,7 +167,10 @@ server.tool(
       ...(to ? { to } : {}),
       ...(domain ? { domain } : {}),
       ...(site ? { site } : {}),
-      ...(interval ? { interval } : {}),
+      "page.total": pageTotal ?? true,
+      interval: interval || "TI_EVERY_15_MINUTES",
+      fieldLimit: fieldLimit || "FL_REQUEST",
+      fieldReport: fieldReport || "FR_NONE",
       ...extra,
     }, method);
   },

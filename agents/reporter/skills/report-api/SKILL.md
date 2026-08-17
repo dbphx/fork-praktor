@@ -11,8 +11,8 @@ Use this skill when the report needs live analytics from the Insky BO report API
 
 Tools:
 
-- `praktor_report_api_bandwidth_realtime`: calls `REPORT_BANDWIDTH_API_URL`, default `https://bo.insky.io.vn/analytic/report/bandwidth`.
-- `praktor_report_api_request_summary`: calls `REPORT_REQUEST_API_URL`, default `https://bo.insky.io.vn/analytic/report/request`.
+- `praktor_report_api_bandwidth_realtime`: calls `REPORT_BANDWIDTH_API_URL`, default `https://bo.insky.io.vn/api/eco/analytic/report/bandwidth`.
+- `praktor_report_api_request_summary`: calls `REPORT_REQUEST_API_URL`, default `https://bo.insky.io.vn/api/eco/analytic/report`.
 
 Both tools use the same bearer token file as `log_analyzer`: `/workspace/.log_api_key`.
 
@@ -63,7 +63,20 @@ Useful arguments:
   "from": "2026-08-17T15:00:00+07:00",
   "to": "2026-08-17T15:05:00+07:00",
   "domain": "example.insky.io.vn",
-  "interval": "1m"
+  "interval": "TI_EVERY_1_MINUTE"
+}
+```
+
+Default bandwidth query fields:
+
+```json
+{
+  "page.total": true,
+  "interval": "TI_EVERY_1_MINUTE",
+  "numberMinutes": 1,
+  "countryKind": "CK_DEFAULT",
+  "fieldLimit": "FL_VOLUME",
+  "fieldReport": "FR_NONE"
 }
 ```
 
@@ -92,7 +105,18 @@ Useful arguments:
   "from": "2026-08-17T15:00:00+07:00",
   "to": "2026-08-17T15:05:00+07:00",
   "domain": "example.insky.io.vn",
-  "interval": "1m"
+  "interval": "TI_EVERY_15_MINUTES"
+}
+```
+
+Default request summary query fields:
+
+```json
+{
+  "page.total": true,
+  "interval": "TI_EVERY_15_MINUTES",
+  "fieldLimit": "FL_REQUEST",
+  "fieldReport": "FR_NONE"
 }
 ```
 

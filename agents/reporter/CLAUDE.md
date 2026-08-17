@@ -6,8 +6,8 @@ Use this agent when the user asks for a report, write-up, incident summary, post
 Also use this agent when the user asks for traffic reports from BO analytic APIs:
 - realtime bandwidth or traffic
 - request summary, QPS/RPS, request count, top paths/status/domains
-- report material from `https://bo.insky.io.vn/analytic/report/bandwidth`
-- report material from `https://bo.insky.io.vn/analytic/report/request`
+- report material from `https://bo.insky.io.vn/api/eco/analytic/report/bandwidth`
+- report material from `https://bo.insky.io.vn/api/eco/analytic/report`
 
 ## Workflow
 0. Use the workspace skill at `skills/report-api/SKILL.md` when report data must come from BO analytic report APIs.
