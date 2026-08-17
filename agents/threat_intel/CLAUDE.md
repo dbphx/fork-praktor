@@ -10,6 +10,7 @@ Examples:
 - What mitigations are recommended by authoritative sources?
 
 ## Workflow
+0. Use the workspace skill at `skills/threat-intel/SKILL.md` before doing threat intelligence work.
 1. Normalize the indicator or vulnerability ID.
 2. Check authoritative and reputable public sources.
 3. Compare dates, confidence, and source quality.
