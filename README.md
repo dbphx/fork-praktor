@@ -106,6 +106,64 @@ Mission Control is available at `http://localhost:8081`.
 
 Agent harness files live in `agents/`. Each workspace can include `AGENT.md`, `CLAUDE.md`, notes, scripts, or other starter files. On agent start, Praktor seeds files that are missing from the corresponding Docker workspace volume without overwriting files the agent has already created.
 
+### Add An App Or Agent With Config Only
+
+If the new app can work with existing agent capabilities (prompt instructions, browser, files, memory, history, nix, env vars, and vault-mounted secrets), you can add it without changing code.
+
+1. Add the agent to `config/praktor.yaml`:
+
+```yaml
+agents:
+  my_app:
+    description: >
+      Handles questions and reports for My App. Pick this agent when the user asks
+      about My App traffic, status, operations, API behavior, or troubleshooting.
+    model: vllm/gemma4-12b
+    env:
+      MY_APP_API_URL: "${MY_APP_API_URL}"
+    files:
+      - secret: my-app-api-key
+        target: /workspace/.my_app_api_key
+        mode: "0600"
+    workspace: my_app
+```
+
+2. Add non-secret env values to `.env`:
+
+```env
+MY_APP_API_URL=https://example.internal/api
+```
+
+3. Store secrets in the vault:
+
+```sh
+docker compose exec fork-praktor /praktor vault set my-app-api-key --value "<KEY>" --description "My App API key"
+docker compose exec fork-praktor /praktor vault assign my-app-api-key --agent my_app
+```
+
+4. Add the workspace harness:
+
+```sh
+mkdir -p agents/my_app
+```
+
+Create `agents/my_app/AGENT.md` for identity and `agents/my_app/CLAUDE.md` for workflow, tool usage, boundaries, and output format. Optional skills can be added under `agents/my_app/skills/<skill-name>/SKILL.md`.
+
+5. Reload and test:
+
+```sh
+docker compose restart fork-praktor
+docker rm -f fork-praktor-agent-my_app 2>/dev/null || true
+```
+
+Then send:
+
+```text
+@my_app kiểm tra trạng thái 15 phút gần nhất
+```
+
+You only need code changes and a rebuilt image when the app needs a new native MCP tool, a new SDK/client integration, new gateway behavior, new mount/secret behavior, or extra binaries/dependencies in the agent image.
+
 ### Run One Service on Another Machine
 
 On a fresh machine, clone the repo, create `.env` and `config/praktor.yaml`, then build the two agent images once before starting the gateway:
