@@ -7,7 +7,7 @@ COPY ui/ .
 RUN npm run build
 
 # Stage 2: Build the Go binary
-FROM golang:1.26.5-alpine AS go-builder
+FROM golang:1.26.6-alpine AS go-builder
 ARG GOPROXY=https://proxy.golang.org,direct
 ENV GOPROXY=${GOPROXY}
 RUN apk add --no-cache busybox-static ca-certificates tzdata && \
