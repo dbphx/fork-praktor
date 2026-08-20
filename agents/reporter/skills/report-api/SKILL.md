@@ -18,6 +18,8 @@ Both tools use the same bearer token file as `log_analyzer`: `/workspace/.log_ap
 
 Never print the token. If the token is missing, say the vault secret `log-api-key` must be assigned to `reporter`.
 
+BO report API auth defaults to `REPORT_API_AUTH_MODE=raw_authorization`, meaning the token is sent as the raw `Authorization` header value, without adding `Bearer `.
+
 ## Time Handling
 
 Use Asia/Ho_Chi_Minh / UTC+7 by default.

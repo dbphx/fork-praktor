@@ -767,6 +767,7 @@ function buildMcpServers(): Record<string, MCPServerConfig> {
         REPORT_BANDWIDTH_API_URL: process.env.REPORT_BANDWIDTH_API_URL || "https://bo.insky.io.vn/api/eco/analytic/report/bandwidth",
         REPORT_REQUEST_API_URL: process.env.REPORT_REQUEST_API_URL || "https://bo.insky.io.vn/api/eco/analytic/report",
         REPORT_API_TOKEN_FILE: process.env.REPORT_API_TOKEN_FILE || process.env.LOG_API_TOKEN_FILE || "/workspace/.log_api_key",
+        REPORT_API_AUTH_MODE: process.env.REPORT_API_AUTH_MODE || "raw_authorization",
       },
     };
   }

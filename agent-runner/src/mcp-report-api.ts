@@ -9,6 +9,7 @@ const DEFAULT_REQUEST_API_URL = "https://bo.insky.io.vn/api/eco/analytic/report"
 const BANDWIDTH_API_URL = process.env.REPORT_BANDWIDTH_API_URL || DEFAULT_BANDWIDTH_API_URL;
 const REQUEST_API_URL = process.env.REPORT_REQUEST_API_URL || DEFAULT_REQUEST_API_URL;
 const TOKEN_PATH = process.env.REPORT_API_TOKEN_FILE || process.env.LOG_API_TOKEN_FILE || "/workspace/.log_api_key";
+const AUTH_MODE = (process.env.REPORT_API_AUTH_MODE || "raw_authorization").trim().toLowerCase();
 const MAX_RESPONSE_CHARS = 24000;
 
 const server = new McpServer({
@@ -52,6 +53,31 @@ function defaultWindow(minutes: number): { from: string; to: string } {
   };
 }
 
+function applyAuth(url: URL, init: RequestInit, token: string, params: Record<string, unknown>): void {
+  const headers = new Headers(init.headers);
+  switch (AUTH_MODE) {
+    case "bearer":
+      headers.set("authorization", `Bearer ${token}`);
+      break;
+    case "raw_authorization":
+      headers.set("authorization", token);
+      break;
+    case "token_header":
+      headers.set("token", token);
+      break;
+    case "x_session_token":
+      headers.set("x-session-token", token);
+      break;
+    case "query_token":
+      params.token = token;
+      break;
+    default:
+      headers.set("authorization", token);
+      break;
+  }
+  init.headers = headers;
+}
+
 async function callReportApi(
   endpointName: string,
   apiURL: string,
@@ -78,10 +104,10 @@ async function callReportApi(
     method: selectedMethod,
     signal: AbortSignal.timeout(20000),
     headers: {
-      authorization: `Bearer ${token}`,
       accept: "application/json",
     },
   };
+  applyAuth(url, init, token, params);
   if (selectedMethod === "GET") {
     for (const [key, value] of Object.entries(params)) appendParam(url, key, value);
   } else {

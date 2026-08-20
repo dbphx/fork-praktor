@@ -190,6 +190,12 @@ For `reporter`, keep `REPORT_BANDWIDTH_API_URL` and `REPORT_REQUEST_API_URL` in 
 docker compose exec fork-praktor /praktor vault assign log-api-key --agent reporter
 ```
 
+The BO report API expects the raw session token in the `Authorization` header by default:
+
+```env
+REPORT_API_AUTH_MODE=raw_authorization
+```
+
 For `code_reader`, put GitLab access in `.env`:
 
 ```env
