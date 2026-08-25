@@ -32,6 +32,7 @@ Useful optional fields:
 
 ```json
 {
+  "pageIndex": 0,
   "pageSize": 10,
   "pageTotal": true,
   "secsEngineMatchedFilter": "SEMF_MATCHED",
@@ -44,7 +45,7 @@ Useful optional fields:
 }
 ```
 
-Prefer `pageSize: 1` and `pageTotal: true` for connectivity or count checks. Prefer `pageSize: 10` to inspect samples.
+Always include `pageIndex: 0` whenever you include `pageSize`, `pageTotal`, or a nested `page` object in `extraQueryJson`; the gateway rejects paginated requests without `page.index`. Prefer `pageSize: 1` and `pageTotal: true` for connectivity or count checks. Prefer `pageSize: 10` to inspect samples.
 
 ## Time Windows
 
@@ -71,7 +72,7 @@ Do not reuse stale dates from previous messages. If the tool result date conflic
 2. If the request is vague, choose a narrow safe default:
    - recent troubleshooting: last 15 minutes
    - "today": local day start to now
-   - connectivity test: last 1 minute, `pageSize: 1`, `pageTotal: true`
+   - connectivity test: last 1 minute, `pageIndex: 0`, `pageSize: 1`, `pageTotal: true`
 3. Query with `secsEngineMatchedFilter: "SEMF_MATCHED"` when the user asks about matched WAF/security events.
 4. If zero results and the user expected data, widen carefully:
    - remove `SEMF_MATCHED` once to check all events

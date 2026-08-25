@@ -28,11 +28,12 @@ Required fields:
 - `to`: ISO timestamp, preferably with `+07:00` offset.
 
 Useful defaults:
+- `pageIndex`: 0 whenever `pageSize`, `pageTotal`, or a nested `page` object is used.
 - `pageSize`: 10 for samples, 1 for connectivity checks.
 - `pageTotal`: true when counting or validating access.
 - `secsEngineMatchedFilter`: `SEMF_MATCHED` when looking for matched security engine events.
 
-For a connectivity test, call the tool with a short recent range and `pageSize: 1`.
+For a connectivity test, call the tool with a short recent range, `pageIndex: 0`, and `pageSize: 1`.
 
 ## Boundaries
 - Do not perform public threat intelligence research unless routed data explicitly requires a quick lookup.

@@ -33,13 +33,14 @@ server.tool(
   {
     from: z.string().describe("Required start timestamp, RFC3339/ISO-8601. Prefer UTC+7 for log_analyzer, e.g. 2026-08-16T19:20:00+07:00. UTC Z is also valid."),
     to: z.string().describe("Required end timestamp, RFC3339/ISO-8601. Prefer UTC+7 for log_analyzer, e.g. 2026-08-16T19:35:00+07:00. UTC Z is also valid."),
+    pageIndex: z.number().int().nonnegative().optional().describe("Requested page index. Sent as page.index. Defaults to 0 whenever page pagination is requested."),
     pageSize: z.number().int().positive().max(1000).optional().describe("Requested page size. Sent as page.size."),
     pageTotal: z.boolean().optional().describe("Whether to ask the API for total count. Sent as page.total."),
     secsEngineMatchedFilter: z.string().optional().describe("Optional secsEngineMatchedFilter, e.g. SEMF_MATCHED."),
     method: z.enum(["GET", "POST"]).optional().describe("HTTP method. Default GET."),
     extraQueryJson: z.string().optional().describe("Optional JSON object of additional query/body fields."),
   },
-  async ({ from, to, pageSize, pageTotal, secsEngineMatchedFilter, method, extraQueryJson }) => {
+  async ({ from, to, pageIndex, pageSize, pageTotal, secsEngineMatchedFilter, method, extraQueryJson }) => {
     if (!LOG_API_URL) {
       return { content: [{ type: "text" as const, text: "Error: LOG_API_URL is not configured." }] };
     }
@@ -68,14 +69,30 @@ server.tool(
     }
 
     const selectedMethod = method || "GET";
+    const extraPage = extra.page;
+    const hasExtraPage =
+      !!extraPage && typeof extraPage === "object" && !Array.isArray(extraPage);
+    const effectivePageIndex =
+      pageIndex ?? (pageSize !== undefined || pageTotal !== undefined || hasExtraPage ? 0 : undefined);
     const baseParams: Record<string, unknown> = {
       from,
       to,
-      ...(pageSize ? { "page.size": pageSize } : {}),
-      ...(pageTotal !== undefined ? { "page.total": pageTotal } : {}),
       ...(secsEngineMatchedFilter ? { secsEngineMatchedFilter } : {}),
-      ...extra,
     };
+    if (hasExtraPage) {
+      const page = { ...(extraPage as Record<string, unknown>) };
+      if (effectivePageIndex !== undefined && page.index === undefined) page.index = effectivePageIndex;
+      if (pageSize !== undefined && page.size === undefined) page.size = pageSize;
+      if (pageTotal !== undefined && page.total === undefined) page.total = pageTotal;
+      Object.assign(baseParams, extra, { page });
+    } else {
+      Object.assign(baseParams, {
+        ...(effectivePageIndex !== undefined ? { "page.index": effectivePageIndex } : {}),
+        ...(pageSize ? { "page.size": pageSize } : {}),
+        ...(pageTotal !== undefined ? { "page.total": pageTotal } : {}),
+        ...extra,
+      });
+    }
 
     const url = new URL(LOG_API_URL);
     const init: RequestInit = {
@@ -117,6 +134,7 @@ server.tool(
               queryTimezone: "UTC+7",
               displayTimezone: "Asia/Ho_Chi_Minh (+07:00)",
               note: "Show user-facing log windows and timestamps in UTC+7 unless the user requested another timezone.",
+              requestParams: baseParams,
               url: selectedMethod === "GET" ? url.toString() : LOG_API_URL,
               body: truncate(body),
             },
